@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { CircleCheck, Plus, Trash2 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import type { TodoItem } from "../types";
 
@@ -48,7 +48,7 @@ export function TodoList({ todos, onAdd, onToggle, onDelete }: TodoListProps) {
 
       <div className="todo-list">
         {todos.length === 0 ? (
-          <p className="empty-copy">这一天还没有计划。</p>
+          <div className="todo-empty"><CircleCheck size={28} strokeWidth={1.3} aria-hidden="true" /><p className="empty-copy">这一天还没有计划。</p><small>给重要的事，留一点时间。</small></div>
         ) : (
           todos.map((todo) => (
             <article className="todo-item" key={todo.id}>

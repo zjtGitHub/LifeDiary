@@ -1,14 +1,16 @@
-import { BookOpen, CalendarDays, Grid3X3, ListChecks } from "lucide-react";
+import { BookOpen, ChartNoAxesCombined, HardDrive, NotebookPen, ScrollText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { BackupPanel } from "./components/BackupPanel";
+import { DataBackup } from "./components/DataBackup";
+import { StockWorkspace } from "./components/stocks/StockWorkspace";
+import { AppLink, usePathname } from "./lib/router";
 import { Calendar } from "./components/Calendar";
 import { DayPanel } from "./components/DayPanel";
 import { LifeGrid } from "./components/LifeGrid";
+import { MonthTimeline } from "./components/MonthTimeline";
 import { SearchPanel } from "./components/SearchPanel";
 import {
   addImagesToDay,
   addTodo,
-  createBackupPayload,
   deleteImageFromDay,
   deleteTodo,
   emptyDayEntry,
@@ -18,7 +20,6 @@ import {
   listAllTags,
   listCalendarStatuses,
   listTodosByDate,
-  restoreBackupPayload,
   saveBirthDate,
   saveDayTags,
   saveDayText,
@@ -28,7 +29,7 @@ import {
 import { isoDate, parseISODate } from "./lib/date";
 import type { CalendarDayStatus, DayEntry, ISODate, Profile, SearchResult, TodoItem, WeekSummary } from "./types";
 
-function App() {
+function DiaryPage({ active }: { active: boolean }) {
   const today = useMemo(() => new Date(), []);
   const [selectedDate, setSelectedDate] = useState<ISODate>(() => isoDate(today));
   const [month, setMonth] = useState<Date>(() => today);
@@ -42,21 +43,21 @@ function App() {
   const [allTags, setAllTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [backupStatus, setBackupStatus] = useState("导出或恢复本地数据");
   const [overviewVersion, setOverviewVersion] = useState(0);
   const [selectedWeekRange, setSelectedWeekRange] = useState<{ startDate: ISODate; endDate: ISODate } | null>(null);
   const [weekSummary, setWeekSummary] = useState<WeekSummary | null>(null);
+  const [isMonthTimelineOpen, setIsMonthTimelineOpen] = useState(false);
+  useEffect(() => {
+    const pause = () => setIsLoadingDay(true);
+    const resume = () => setIsLoadingDay(false);
+    window.addEventListener("diary-data-restoring", pause);
+    window.addEventListener("diary-data-restore-failed", resume);
+    return () => { window.removeEventListener("diary-data-restoring", pause); window.removeEventListener("diary-data-restore-failed", resume); };
+  }, []);
 
   const refreshTodos = async (date = selectedDate) => {
     const nextTodos = await listTodosByDate(date);
     setTodos(nextTodos);
-  };
-
-  const refreshEntry = async (date = selectedDate) => {
-    const nextEntry = await getDayEntry(date);
-    setEntry(nextEntry);
-    setText(nextEntry.text);
-    setSaveStatus("已加载");
   };
 
   const refreshOverview = async () => {
@@ -224,67 +225,18 @@ function App() {
     setProfile(nextProfile);
   };
 
-  const handleExportBackup = async () => {
-    setBackupStatus("正在导出...");
-    try {
-      const payload = await createBackupPayload();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `riji-backup-${isoDate(new Date())}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
-      setBackupStatus("备份已导出");
-    } catch {
-      setBackupStatus("导出失败");
-    }
-  };
-
-  const handleImportBackup = async (file: File) => {
-    if (!window.confirm("导入备份会覆盖当前浏览器里的日记、图片、计划和生日。确定继续吗？")) {
-      return;
-    }
-
-    setBackupStatus("正在导入...");
-    try {
-      const payload = JSON.parse(await file.text());
-      await restoreBackupPayload(payload);
-      const nextProfile = await getProfile();
-      setProfile(nextProfile);
-      setSelectedWeekRange(null);
-      await Promise.all([refreshEntry(selectedDate), refreshTodos(selectedDate), refreshOverview()]);
-      setBackupStatus("备份已恢复");
-    } catch {
-      setBackupStatus("导入失败");
-    }
-  };
-
   return (
     <main className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">本地日记</p>
-          <h1>
-            <BookOpen aria-hidden="true" size={28} />
-            日记
-          </h1>
+          <p className="eyebrow">日常 · 思考 · 记忆</p>
+          <h1>日记</h1>
+          <p className="page-description">把平凡的日子，写成自己的故事。</p>
         </div>
         <div className="header-pills" aria-label="功能概览">
-          <span>
-            <CalendarDays size={16} />
-            日历
-          </span>
-          <span>
-            <ListChecks size={16} />
-            计划
-          </span>
-          <span>
-            <Grid3X3 size={16} />
-            人生表格
-          </span>
+          <button type="button" className="primary icon-text-button" onClick={() => setIsMonthTimelineOpen(true)}>
+            <ScrollText size={16} />月总结
+          </button>
         </div>
       </header>
 
@@ -297,14 +249,6 @@ function App() {
             onMonthChange={setMonth}
             onSelectDate={handleSelectDate}
           />
-          <SearchPanel
-            query={searchQuery}
-            results={searchResults}
-            tags={allTags}
-            onQueryChange={setSearchQuery}
-            onSelectDate={handleSelectDate}
-          />
-          <BackupPanel status={backupStatus} onExport={handleExportBackup} onImport={handleImportBackup} />
         </aside>
 
         <DayPanel
@@ -322,6 +266,17 @@ function App() {
           onDeleteTodo={handleDeleteTodo}
         />
 
+        <aside className="diary-tools" aria-label="查找与备份">
+          <SearchPanel
+            query={searchQuery}
+            results={searchResults}
+            tags={allTags}
+            onQueryChange={setSearchQuery}
+            onSelectDate={handleSelectDate}
+          />
+          <DataBackup />
+        </aside>
+
         <LifeGrid
           birthDate={profile.birthDate}
           selectedDate={selectedDate}
@@ -331,8 +286,37 @@ function App() {
           onSelectWeek={handleSelectLifeWeek}
         />
       </div>
+      {isMonthTimelineOpen && active ? <MonthTimeline initialYear={Number(selectedDate.slice(0, 4))}
+        overviewVersion={overviewVersion} onClose={() => setIsMonthTimelineOpen(false)} onSelectDate={handleSelectDate} /> : null}
     </main>
   );
+}
+
+function App() {
+  const path = usePathname();
+  const [dataVersion, setDataVersion] = useState(0);
+  const [restoreNotice, setRestoreNotice] = useState(false);
+  useEffect(() => {
+    const refresh = () => { setDataVersion(version => version + 1); setRestoreNotice(true); };
+    window.addEventListener("diary-data-restored", refresh);
+    return () => window.removeEventListener("diary-data-restored", refresh);
+  }, []);
+  const stockRoute = /^\/stocks(?:\/([^/]+))?\/?$/.exec(path);
+  useEffect(() => { document.title = stockRoute ? "股票备忘录 · 时光日记" : "日记 · 时光日记"; }, [path]);
+  return <>
+    <nav className="app-navigation" aria-label="主导航">
+      <AppLink href="/" className="app-brand" aria-label="时光日记首页"><span className="app-brand-mark"><BookOpen size={21} aria-hidden="true" /></span><span className="app-brand-name">时光日记<small>留住每一次成长</small></span></AppLink>
+      <div className="app-nav-links">
+        <AppLink href="/" aria-current={path === "/" ? "page" : undefined}><NotebookPen size={16} aria-hidden="true" />日记</AppLink>
+        <AppLink href="/stocks" aria-current={stockRoute ? "page" : undefined}><ChartNoAxesCombined size={16} aria-hidden="true" />股票备忘录</AppLink>
+      </div>
+      <span className="app-storage-note"><HardDrive size={14} aria-hidden="true" />本地保存<span className="storage-status-dot" aria-hidden="true" /></span>
+    </nav>
+    {restoreNotice ? <p className="app-restore-notice" role="status">全部数据已恢复。<button type="button" className="stock-text-button" onClick={() => setRestoreNotice(false)}>关闭提示</button></p> : null}
+    <div hidden={path !== "/"}><DiaryPage key={dataVersion} active={path === "/"} /></div>
+    {stockRoute ? <StockWorkspace key={dataVersion} stockId={stockRoute[1]} /> : null}
+    {!stockRoute && path !== "/" ? <main className="app-shell"><h1>页面不存在</h1><AppLink href="/">返回日记</AppLink></main> : null}
+  </>;
 }
 
 export default App;

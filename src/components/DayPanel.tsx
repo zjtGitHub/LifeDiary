@@ -146,7 +146,7 @@ export function DayPanel({
           </div>
 
           {entry.images.length === 0 ? (
-            <p className="empty-copy">可以把这一天的照片放在这里。</p>
+            <div className="diary-image-empty"><ImagePlus size={22} strokeWidth={1.4} aria-hidden="true" /><p>可以把这一天的照片放在这里。</p></div>
           ) : (
             <div className="image-grid">
               {entry.images.map((image) => (

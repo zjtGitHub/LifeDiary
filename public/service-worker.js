@@ -1,4 +1,4 @@
-const CACHE_NAME = "riji-shell-v2";
+const CACHE_NAME = "riji-shell-v4";
 const fromScope = (path) => new URL(path, self.registration.scope).toString();
 const APP_SHELL = ["./", "manifest.webmanifest", "icons/icon.svg"].map(fromScope);
 

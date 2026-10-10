@@ -65,3 +65,76 @@ export interface WeekSummary {
   todoCount: number;
   openTodoCount: number;
 }
+
+export interface MonthlyReflection {
+  month: string;
+  text: string;
+  updatedAt: string;
+}
+
+export interface MonthSummary {
+  month: string;
+  reflection: string;
+  diaryDays: number;
+  imageCount: number;
+  todoCount: number;
+  completedTodoCount: number;
+  tags: string[];
+  recordedDates: ISODate[];
+}
+
+export interface Stock {
+  id: string;
+  name: string;
+  market: string;
+  code: string;
+  pinned: boolean;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StockNoteType = "想法" | "事件" | "操作" | "复盘";
+export type StockStance = "未判断" | "偏乐观" | "中性" | "偏谨慎";
+export interface StockImageRef { id: string; caption: string }
+export interface StockNoteContent {
+  occurredAt: string;
+  title: string;
+  text: string;
+  type: StockNoteType;
+  isKeyNode: boolean;
+  stance: StockStance;
+  tags: string[];
+  images: StockImageRef[];
+  reviewOfNoteId: string | null;
+}
+export interface StockNote {
+  id: string;
+  stockId: string;
+  draft: StockNoteContent | null;
+  currentRevisionId: string | null;
+  firstPublishedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface StockNoteRevision extends StockNoteContent {
+  id: string;
+  noteId: string;
+  stockId: string;
+  revisionNumber: number;
+  publishedAt: string;
+  deleted: boolean;
+}
+export interface StockNoteImage {
+  id: string;
+  blob: Blob;
+  thumbnail: Blob;
+  name: string;
+  createdAt: string;
+}
+export interface StockTimelineItem {
+  note: StockNote;
+  revision: StockNoteRevision;
+  versionCount: number;
+}
