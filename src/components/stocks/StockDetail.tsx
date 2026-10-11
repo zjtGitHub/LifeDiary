@@ -56,7 +56,7 @@ export function StockDetail({ stock, version, onChanged }: { stock: Stock; versi
   const filteredView = Boolean(filters.cutoff || filters.query?.trim() || filters.year || filters.month || filters.keyOnly);
   return <section className="stock-detail" aria-label="股票详情">
     <AppLink className="stock-mobile-back" href="/stocks">← 返回股票列表</AppLink>
-    <header className="stock-detail-header"><div><p className="eyebrow">{stock.archivedAt ? "已归档 · 仍可记录与回顾" : "我的股票档案"}</p><h1>{stock.name}</h1><p className="stock-muted">{stock.market} · {stock.code}</p></div>
+    <header className="stock-detail-header"><div><p className="eyebrow">{stock.archivedAt ? "已归档 · 仍可记录与回顾" : "我的股票档案"}</p><h1>{stock.name}</h1><p className="stock-muted">{stock.market}{stock.code ? ` · ${stock.code}` : ""}</p></div>
       <button className="primary icon-text-button" type="button" disabled={busy || Boolean(editor)} onClick={() => openNew()}>＋ 新增记录</button>
     </header>
     <div className="stock-actions stock-management">

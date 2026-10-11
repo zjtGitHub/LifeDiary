@@ -17,7 +17,8 @@ export const emptyStockContent = (): StockNoteContent => ({
 export function normalizeStockIdentity(market: string, code: string) {
   const normalizedMarket = market.trim().toUpperCase();
   let normalizedCode = code.trim().replace(/\s+/g, "").toUpperCase();
-  if (!normalizedMarket || !normalizedCode) throw new Error("请填写市场和股票代码");
+  if (!normalizedMarket) throw new Error("请填写市场");
+  if (!normalizedCode) return { market: normalizedMarket, code: undefined };
   if (["SH", "SZ"].includes(normalizedMarket) && !/^\d{6}$/.test(normalizedCode)) throw new Error("沪深股票代码需要 6 位数字");
   if (normalizedMarket === "HK") {
     if (!/^\d{1,5}$/.test(normalizedCode)) throw new Error("港股代码需要 1—5 位数字");
@@ -26,11 +27,14 @@ export function normalizeStockIdentity(market: string, code: string) {
   return { market: normalizedMarket, code: normalizedCode };
 }
 
-export async function addStock(name: string, market: string, code: string): Promise<{ stock: Stock; existing: boolean }> {
+export async function addStock(name: string, market: string, code = ""): Promise<{ stock: Stock; existing: boolean }> {
   if (!name.trim()) throw new Error("请填写股票名称");
   const identity = normalizeStockIdentity(market, code);
   return db.transaction("rw", db.stocks, async () => {
-    const existing = await db.stocks.where("[market+code]").equals([identity.market, identity.code]).first();
+    // A missing code is omitted from the compound index, so uncoded stocks can coexist.
+    const existing = identity.code
+      ? await db.stocks.where("[market+code]").equals([identity.market, identity.code]).first()
+      : await db.stocks.filter(stock => stock.market === identity.market && !stock.code && stock.name === name.trim()).first();
     if (existing) return { stock: existing, existing: true };
     const timestamp = now();
     const stock: Stock = { id: newId(), name: name.trim(), ...identity, pinned: false, archivedAt: null, createdAt: timestamp, updatedAt: timestamp };

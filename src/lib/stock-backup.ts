@@ -50,10 +50,13 @@ export function decodeStockBackup(data?: StockBackupData): StockBackupTables {
   const stockIds = unique(data.stocks); unique(data.notes); unique(data.revisions); const imageIds = unique(data.images);
   const identities = new Set<string>();
   for (const stock of data.stocks) {
-    if (![stock.name, stock.market, stock.code].every(value => isString(value) && value.trim()) || typeof stock.pinned !== "boolean" || !isTime(stock.createdAt) || !isTime(stock.updatedAt) || stock.archivedAt !== null && !isTime(stock.archivedAt)) fail();
-    const normalizedCode = stock.market.trim().toUpperCase() === "HK" && /^\d{1,5}$/.test(stock.code) ? stock.code.padStart(5, "0") : stock.code.trim().replace(/\s+/g, "").toUpperCase();
-    if (stock.market !== stock.market.trim().toUpperCase() || stock.code !== normalizedCode) fail();
-    const key = JSON.stringify([stock.market, stock.code]); if (identities.has(key)) fail(); identities.add(key);
+    if (![stock.name, stock.market].every(value => isString(value) && value.trim()) || stock.code !== undefined && (!isString(stock.code) || !stock.code.trim()) || typeof stock.pinned !== "boolean" || !isTime(stock.createdAt) || !isTime(stock.updatedAt) || stock.archivedAt !== null && !isTime(stock.archivedAt)) fail();
+    if (stock.market !== stock.market.trim().toUpperCase()) fail();
+    if (stock.code !== undefined) {
+      const normalizedCode = stock.market === "HK" && /^\d{1,5}$/.test(stock.code) ? stock.code.padStart(5, "0") : stock.code.trim().replace(/\s+/g, "").toUpperCase();
+      if (stock.code !== normalizedCode) fail();
+      const key = JSON.stringify([stock.market, stock.code]); if (identities.has(key)) fail(); identities.add(key);
+    }
   }
   const notesById = new Map(data.notes.map(note => [note.id, note]));
   const revisionsById = new Map(data.revisions.map(revision => [revision.id, revision]));

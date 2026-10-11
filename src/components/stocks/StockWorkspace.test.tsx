@@ -29,7 +29,7 @@ describe("stock workspace routes and user flows", () => {
     const library = within(screen.getByRole("complementary", { name: "股票列表" }));
     fireEvent.click(library.getByRole("button", { name: "添加股票" }));
     fireEvent.change(library.getByLabelText("股票名称"), { target: { value: "测试股票" } });
-    fireEvent.change(library.getByLabelText("股票代码"), { target: { value: "600001" } });
+    fireEvent.change(library.getByLabelText("股票代码（选填）"), { target: { value: "600001" } });
     fireEvent.click(library.getByRole("button", { name: "保存股票" }));
     await screen.findByRole("heading", { name: "测试股票" });
     expect(window.location.pathname).toMatch(/^\/stocks\//);
@@ -44,6 +44,22 @@ describe("stock workspace routes and user flows", () => {
     expect(within(screen.getByRole("region", { name: "股票记录编辑器" })).getByLabelText("当下的理解")).toHaveValue("切换后仍然保留的想法");
     fireEvent.click(screen.getByRole("button", { name: "加入时间轴" }));
     expect(await screen.findByRole("article", { name: "切换后仍然保留的想法" })).toBeInTheDocument();
+  });
+
+  it("adds multiple stocks without a code and displays only their market", async () => {
+    render(<App />);
+    const library = within(screen.getByRole("complementary", { name: "股票列表" }));
+    for (const name of ["无代码甲", "无代码乙"]) {
+      fireEvent.click(library.getByRole("button", { name: "添加股票" }));
+      expect(library.getByLabelText("股票代码（选填）")).not.toBeRequired();
+      fireEvent.change(library.getByLabelText("股票名称"), { target: { value: name } });
+      fireEvent.click(library.getByRole("button", { name: "保存股票" }));
+      await screen.findByRole("heading", { name });
+      const link = await library.findByRole("link", { name: new RegExp(name) });
+      expect(within(link).getByText("SH")).toBeInTheDocument();
+    }
+    expect(await db.stocks.count()).toBe(2);
+    expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
   });
 
   it("uploads multiple images, opens the gallery, edits a note and keeps its old version", async () => {

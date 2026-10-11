@@ -27,6 +27,40 @@ describe("stock memo persistence and historical views", () => {
     expect(await db.stocks.count()).toBe(2);
   });
 
+  it("keeps uncoded stocks distinct and reopens the same uncoded name within a market", async () => {
+    const first = await addStock("甲", "SH");
+    const second = await addStock("乙", "SH", "  ");
+    const otherMarket = await addStock("甲", "HK", "");
+    expect(first.stock.code).toBeUndefined();
+    expect(second.stock.id).not.toBe(first.stock.id);
+    expect(otherMarket.stock.code).toBeUndefined();
+    expect(otherMarket.stock.id).not.toBe(first.stock.id);
+    expect((await addStock(" 甲 ", " sh ", "")).stock.id).toBe(first.stock.id);
+    expect((await addStock("甲", "SH", "600001")).existing).toBe(false);
+    expect(await db.stocks.count()).toBe(4);
+    await expect(addStock("甲", " ")).rejects.toThrow("请填写市场");
+    await expect(addStock("甲", "HK", "invalid")).rejects.toThrow("1—5 位数字");
+  });
+
+  it("restores JSON backups with several uncoded stocks and existing coded stocks", async () => {
+    const first = (await addStock("甲", "SH")).stock;
+    const second = (await addStock("乙", "SH")).stock;
+    const coded = (await addStock("丙", "HK", "700")).stock;
+    await record(first.id, "无代码股票的记录");
+    const payload = JSON.parse(JSON.stringify(await createBackupPayload()));
+    await db.delete(); await db.open(); await restoreBackupPayload(payload);
+    expect(await db.stocks.count()).toBe(3);
+    expect((await db.stocks.get(first.id))?.code).toBeUndefined();
+    expect((await db.stocks.get(second.id))?.name).toBe("乙");
+    expect((await db.stocks.get(coded.id))?.code).toBe("00700");
+    expect((await listStockTimeline(first.id))[0].revision.text).toBe("无代码股票的记录");
+    expect((await addStock("丁", "SH")).existing).toBe(false);
+    const duplicate = await createBackupPayload();
+    duplicate.stockMemo!.stocks.push({ ...coded, id: "duplicate-code" });
+    await expect(restoreBackupPayload(duplicate)).rejects.toThrow("备份数据无效");
+    expect(await db.stocks.count()).toBe(4);
+  });
+
   it("keeps multiple same-day notes ordered and isolates drafts and other stocks", async () => {
     const { stock } = await addStock("甲", "US", "AAA");
     const other = (await addStock("乙", "US", "BBB")).stock;

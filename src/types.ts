@@ -87,7 +87,7 @@ export interface Stock {
   id: string;
   name: string;
   market: string;
-  code: string;
+  code?: string;
   pinned: boolean;
   archivedAt: string | null;
   createdAt: string;
