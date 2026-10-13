@@ -25,6 +25,23 @@ export interface TodoItem {
   updatedAt: string;
 }
 
+export interface ChecklistGroup {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChecklistItem {
+  id: string;
+  groupId: string;
+  title: string;
+  notes: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Profile {
   id: "me";
   birthDate?: ISODate;

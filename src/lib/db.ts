@@ -3,6 +3,8 @@ import { eachDayOfInterval, format, parseISO } from "date-fns";
 import { decodeStockBackup, encodeStockBackup, type StockBackupData } from "./stock-backup";
 import type {
   CalendarDayStatus,
+  ChecklistGroup,
+  ChecklistItem,
   DayEntry,
   DiaryImage,
   ISODate,
@@ -31,6 +33,8 @@ const createId = () => {
 export class DiaryDatabase extends Dexie {
   dayEntries!: Table<DayEntry, ISODate>;
   todos!: Table<TodoItem, string>;
+  checklistGroups!: Table<ChecklistGroup, string>;
+  checklistItems!: Table<ChecklistItem, string>;
   profile!: Table<Profile, "me">;
   monthlyReflections!: Table<MonthlyReflection, string>;
   stocks!: Table<Stock, string>;
@@ -51,6 +55,10 @@ export class DiaryDatabase extends Dexie {
       stockNotes: "&id, stockId, [stockId+updatedAt]",
       stockRevisions: "&id, noteId, stockId, [stockId+occurredAt], [stockId+publishedAt], &[noteId+revisionNumber]",
       stockImages: "&id"
+    });
+    this.version(4).stores({
+      checklistGroups: "&id, createdAt",
+      checklistItems: "&id, groupId, createdAt"
     });
   }
 }
@@ -160,6 +168,20 @@ export const deleteImageFromDay = async (date: ISODate, imageId: string): Promis
 export const listTodosByDate = async (date: ISODate): Promise<TodoItem[]> => {
   const todos = await db.todos.where("date").equals(date).sortBy("createdAt");
   return todos;
+};
+
+export const getCalendarMonthData = async (startDate: ISODate, endDate: ISODate) => {
+  const [entries, todos] = await Promise.all([
+    db.dayEntries.where("date").between(startDate, endDate, true, true).toArray(),
+    db.todos.where("date").between(startDate, endDate, true, true).toArray()
+  ]);
+  const entriesByDate: Record<ISODate, DayEntry> = {};
+  const todosByDate: Record<ISODate, TodoItem[]> = {};
+
+  for (const entry of entries) entriesByDate[entry.date] = normalizeDayEntry(entry);
+  for (const todo of todos) (todosByDate[todo.date] ??= []).push(todo);
+
+  return { entries: entriesByDate, todos: todosByDate };
 };
 
 export const addTodo = async (date: ISODate, title: string): Promise<TodoItem> => {
@@ -369,6 +391,8 @@ export interface BackupPayload {
   todos: TodoItem[];
   monthlyReflections?: MonthlyReflection[];
   stockMemo?: StockBackupData;
+  checklistGroups?: ChecklistGroup[];
+  checklistItems?: ChecklistItem[];
 }
 
 const blobToDataUrl = (blob: Blob): Promise<string> =>
@@ -386,9 +410,10 @@ const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
 };
 
 export const createBackupPayload = async (): Promise<BackupPayload> => {
-  const [profile, entries, todos, monthlyReflections, stocks, notes, revisions, images] = await db.transaction("r", db.tables, () => Promise.all([
+  const [profile, entries, todos, monthlyReflections, stocks, notes, revisions, images, checklistGroups, checklistItems] = await db.transaction("r", db.tables, () => Promise.all([
     getProfile(), db.dayEntries.toArray(), db.todos.toArray(), db.monthlyReflections.toArray(),
-    db.stocks.toArray(), db.stockNotes.toArray(), db.stockRevisions.toArray(), db.stockImages.toArray()
+    db.stocks.toArray(), db.stockNotes.toArray(), db.stockRevisions.toArray(), db.stockImages.toArray(),
+    db.checklistGroups.toArray(), db.checklistItems.toArray()
   ]));
   const stockMemo = await encodeStockBackup({ stocks, notes, revisions, images });
   const dayEntries = await Promise.all(
@@ -422,7 +447,9 @@ export const createBackupPayload = async (): Promise<BackupPayload> => {
     dayEntries,
     todos,
     monthlyReflections,
-    stockMemo
+    stockMemo,
+    checklistGroups,
+    checklistItems
   };
 };
 
@@ -431,6 +458,15 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     throw new Error("Unsupported backup file");
   }
   const stockData = decodeStockBackup(payload.stockMemo);
+  const checklistGroups = payload.checklistGroups ?? [];
+  const checklistItems = payload.checklistItems ?? [];
+  if (!Array.isArray(checklistGroups) || !Array.isArray(checklistItems) ||
+    checklistGroups.some(group => !group || typeof group.id !== "string" || !group.id || typeof group.name !== "string" || !group.name.trim() || typeof group.createdAt !== "string" || typeof group.updatedAt !== "string") ||
+    new Set(checklistGroups.map(group => group.id)).size !== checklistGroups.length ||
+    checklistItems.some(item => !item || typeof item.id !== "string" || !item.id || typeof item.title !== "string" || !item.title.trim() || typeof item.notes !== "string" || typeof item.completed !== "boolean" || typeof item.groupId !== "string" || (item.groupId !== "" && !checklistGroups.some(group => group.id === item.groupId)) || typeof item.createdAt !== "string" || typeof item.updatedAt !== "string") ||
+    new Set(checklistItems.map(item => item.id)).size !== checklistItems.length) {
+    throw new Error("Invalid checklist data");
+  }
 
   const monthlyReflections = payload.monthlyReflections ?? [];
   if (!Array.isArray(monthlyReflections) || monthlyReflections.some((item) =>
@@ -473,5 +509,7 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     await db.stockNotes.bulkPut(stockData.notes);
     await db.stockRevisions.bulkPut(stockData.revisions);
     await db.stockImages.bulkPut(stockData.images);
+    await db.checklistGroups.bulkPut(checklistGroups);
+    await db.checklistItems.bulkPut(checklistItems);
   });
 };

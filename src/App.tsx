@@ -1,9 +1,11 @@
-import { BookOpen, ChartNoAxesCombined, HardDrive, NotebookPen, ScrollText } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BookOpen, ChartNoAxesCombined, HardDrive, ListChecks, NotebookPen, ScrollText } from "lucide-react";
+import { useEffect, useState } from "react";
 import { DataBackup } from "./components/DataBackup";
 import { StockWorkspace } from "./components/stocks/StockWorkspace";
 import { AppLink, usePathname } from "./lib/router";
 import { Calendar } from "./components/Calendar";
+import { MonthCalendar } from "./components/MonthCalendar";
+import { TaskList } from "./components/TaskList";
 import { DayPanel } from "./components/DayPanel";
 import { LifeGrid } from "./components/LifeGrid";
 import { MonthTimeline } from "./components/MonthTimeline";
@@ -29,11 +31,16 @@ import {
 import { isoDate, parseISODate } from "./lib/date";
 import type { CalendarDayStatus, DayEntry, ISODate, Profile, SearchResult, TodoItem, WeekSummary } from "./types";
 
-function DiaryPage({ active }: { active: boolean }) {
-  const today = useMemo(() => new Date(), []);
-  const [selectedDate, setSelectedDate] = useState<ISODate>(() => isoDate(today));
-  const [month, setMonth] = useState<Date>(() => today);
-  const [entry, setEntry] = useState<DayEntry>(() => emptyDayEntry(isoDate(today)));
+interface DiaryPageProps {
+  active: boolean;
+  selectedDate: ISODate;
+  setSelectedDate: (date: ISODate) => void;
+  month: Date;
+  setMonth: (month: Date) => void;
+}
+
+function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: DiaryPageProps) {
+  const [entry, setEntry] = useState<DayEntry>(() => emptyDayEntry(selectedDate));
   const [text, setText] = useState("");
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [profile, setProfile] = useState<Profile>({ id: "me" });
@@ -66,6 +73,15 @@ function DiaryPage({ active }: { active: boolean }) {
     setAllTags(nextTags);
     setOverviewVersion((version) => version + 1);
   };
+
+  useEffect(() => {
+    const handleCalendarDataChange = () => {
+      void refreshTodos();
+      void refreshOverview();
+    };
+    window.addEventListener("diary-data-changed", handleCalendarDataChange);
+    return () => window.removeEventListener("diary-data-changed", handleCalendarDataChange);
+  }, [selectedDate]);
 
   useEffect(() => {
     let alive = true;
@@ -294,6 +310,8 @@ function DiaryPage({ active }: { active: boolean }) {
 
 function App() {
   const path = usePathname();
+  const [month, setMonth] = useState<Date>(() => new Date());
+  const [selectedDate, setSelectedDate] = useState<ISODate>(() => isoDate(new Date()));
   const [dataVersion, setDataVersion] = useState(0);
   const [restoreNotice, setRestoreNotice] = useState(false);
   useEffect(() => {
@@ -302,20 +320,29 @@ function App() {
     return () => window.removeEventListener("diary-data-restored", refresh);
   }, []);
   const stockRoute = /^\/stocks(?:\/([^/]+))?\/?$/.exec(path);
-  useEffect(() => { document.title = stockRoute ? "股票备忘录 · 时光日记" : "日记 · 时光日记"; }, [path]);
+  const isCalendarRoute = path === "/calendar";
+  const isTaskListRoute = path === "/list";
+  useEffect(() => { document.title = isCalendarRoute ? "日历 · 时光日记" : isTaskListRoute ? "清单 · 时光日记" : stockRoute ? "股票备忘录 · 时光日记" : "日记 · 时光日记"; }, [path]);
+  const handleCalendarDateSelect = (date: ISODate) => {
+    setSelectedDate(date);
+    setMonth(parseISODate(date));
+  };
   return <>
     <nav className="app-navigation" aria-label="主导航">
       <AppLink href="/" className="app-brand" aria-label="时光日记首页"><span className="app-brand-mark"><BookOpen size={21} aria-hidden="true" /></span><span className="app-brand-name">时光日记<small>留住每一次成长</small></span></AppLink>
       <div className="app-nav-links">
         <AppLink href="/" aria-current={path === "/" ? "page" : undefined}><NotebookPen size={16} aria-hidden="true" />日记</AppLink>
+        <AppLink href="/list" aria-current={isTaskListRoute ? "page" : undefined}><ListChecks size={16} aria-hidden="true" />清单</AppLink>
         <AppLink href="/stocks" aria-current={stockRoute ? "page" : undefined}><ChartNoAxesCombined size={16} aria-hidden="true" />股票备忘录</AppLink>
       </div>
       <span className="app-storage-note"><HardDrive size={14} aria-hidden="true" />本地保存<span className="storage-status-dot" aria-hidden="true" /></span>
     </nav>
     {restoreNotice ? <p className="app-restore-notice" role="status">全部数据已恢复。<button type="button" className="stock-text-button" onClick={() => setRestoreNotice(false)}>关闭提示</button></p> : null}
-    <div hidden={path !== "/"}><DiaryPage key={dataVersion} active={path === "/"} /></div>
+    <div hidden={path !== "/"}><DiaryPage key={dataVersion} active={path === "/"} selectedDate={selectedDate} setSelectedDate={setSelectedDate} month={month} setMonth={setMonth} /></div>
+    {isTaskListRoute ? <TaskList key={dataVersion} /> : null}
+    {isCalendarRoute ? <MonthCalendar month={month} selectedDate={selectedDate} onMonthChange={setMonth} onSelectDate={handleCalendarDateSelect} /> : null}
     {stockRoute ? <StockWorkspace key={dataVersion} stockId={stockRoute[1]} /> : null}
-    {!stockRoute && path !== "/" ? <main className="app-shell"><h1>页面不存在</h1><AppLink href="/">返回日记</AppLink></main> : null}
+    {!stockRoute && path !== "/" && !isCalendarRoute && !isTaskListRoute ? <main className="app-shell"><h1>页面不存在</h1><AppLink href="/">返回日记</AppLink></main> : null}
   </>;
 }
 

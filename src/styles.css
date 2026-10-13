@@ -235,10 +235,15 @@ button {
 }
 
 .calendar-day {
-  position: relative;
   display: grid;
+  grid-template-rows: 18px 12px;
   place-items: center;
+  align-content: center;
+  gap: 2px;
+  width: 100%;
   min-width: 0;
+  min-height: 42px;
+  padding: 4px 0;
   aspect-ratio: 1;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -268,30 +273,103 @@ button {
   box-shadow: 0 3px 8px rgba(36, 69, 54, .16);
 }
 
-.calendar-day small {
-  position: absolute;
-  right: 5px;
-  bottom: 4px;
+.month-calendar-page { padding-top: 20px; }
+.calendar-back-link { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px; color: var(--muted); font-size: .82rem; text-decoration: none; }
+.calendar-back-link:hover { color: var(--accent); }
+.month-calendar-panel { overflow: hidden; border-radius: 12px; box-shadow: none; }
+.month-calendar-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; }
+.month-calendar-toolbar h1 { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--ink); font-size: 1.5rem; font-weight: 600; letter-spacing: -.025em; }
+.month-calendar-toolbar h1 svg { flex-shrink: 0; }
+.calendar-view-week .month-calendar-toolbar h1 { font-size: 1.15rem; }
+.month-calendar-actions { display: flex; flex-shrink: 0; align-items: center; gap: 14px; }
+.month-calendar-actions .icon-button { width: 40px; min-height: 40px; }
+.month-calendar-actions .icon-button, .calendar-view-select, .calendar-period-navigation { border-color: #d7dbd5; border-radius: 9px; }
+.calendar-view-select { position: relative; height: 40px; border: 1px solid #d7dbd5; background: white; }
+.calendar-view-select select { width: 70px; height: 100%; appearance: none; padding: 0 30px 0 17px; border: 0; border-radius: inherit; color: var(--ink); background: transparent; cursor: pointer; font-size: .95rem; }
+.calendar-view-select svg { position: absolute; top: 12px; right: 11px; pointer-events: none; color: var(--muted); }
+.calendar-period-navigation { display: flex; height: 40px; border: 1px solid #d7dbd5; background: white; }
+.calendar-period-navigation button { display: inline-flex; align-items: center; justify-content: center; width: 40px; padding: 0; border: 0; background: transparent; color: var(--ink); }
+.calendar-period-navigation button:first-child { border-radius: 8px 0 0 8px; }
+.calendar-period-navigation button:last-child { border-radius: 0 8px 8px 0; }
+.calendar-period-navigation .month-today-button { width: 64px; border-right: 1px solid #d7dbd5; border-left: 1px solid #d7dbd5; font-size: .9rem; }
+.calendar-period-navigation button:hover, .calendar-view-select:hover { background: var(--paper); }
+.calendar-period-navigation button:focus-visible { position: relative; z-index: 1; }
+.month-quick-add { display: flex; align-items: center; gap: 10px; margin: 0 24px 18px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.month-quick-add label { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.month-quick-add input { min-width: 0; flex: 1; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-strong); color: var(--ink); }
+.month-quick-add button { min-height: 40px; padding: 0 16px; }
+.month-calendar-scroll { overflow-x: auto; }
+.month-calendar-weekdays, .month-calendar-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 0; }
+.month-calendar-grid { display: grid; grid-auto-rows: minmax(150px, auto); min-width: 0; }
+.month-calendar-weekdays { padding: 0 1px; border-bottom: 1px solid var(--line); }
+.month-calendar-weekdays span { padding: 12px 10px; color: var(--muted); font-size: .8rem; text-align: center; }
+.month-calendar-day { display: flex; min-width: 0; min-height: 142px; flex-direction: column; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--paper-strong); }
+.month-calendar-day:nth-child(7n) { border-right: 0; }
+.month-calendar-day.outside-month { background: #fbfaf8; }
+.month-calendar-day.is-selected { background: #f7f9fc; }
+.month-calendar-day.is-today.is-selected { background: #f3f7ff; }
+.month-calendar-date { display: flex; min-height: 42px; align-items: center; gap: 7px; align-self: flex-start; padding: 8px 10px 4px; border: 0; background: transparent; color: var(--ink); }
+.month-calendar-date-number { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.month-calendar-day.outside-month .month-calendar-date { color: #a6a197; }
+.month-calendar-day.is-today .month-calendar-date-number { background: #4d76e8; color: white; font-weight: 600; }
+.month-calendar-today-label { color: #4d76e8; font-size: .68rem; }
+.month-calendar-events { display: grid; align-content: start; gap: 4px; padding: 2px 5px 8px; }
+.month-calendar-event, .month-calendar-diary { display: flex; width: 100%; min-width: 0; min-height: 25px; align-items: center; gap: 6px; overflow: hidden; padding: 3px 6px; border: 0; border-radius: 6px; color: #40564e; text-align: left; }
+.month-calendar-event { background: #e6f1ee; }
+.month-calendar-event:nth-child(3n + 2) { background: #e9eef9; }
+.month-calendar-event:nth-child(3n) { background: #f8efe4; }
+.month-calendar-event:hover, .month-calendar-diary:hover { filter: brightness(.97); }
+.month-calendar-check { display: grid; width: 14px; height: 14px; flex: 0 0 14px; place-items: center; border: 1px solid currentColor; border-radius: 4px; opacity: .8; }
+.month-calendar-event.completed { background: #f0f1ee; color: #9a9e96; }
+.month-calendar-event-title, .month-calendar-diary > span:last-child { display: block; min-width: 0; overflow: hidden; font-size: .73rem; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.month-calendar-event.completed .month-calendar-event-title { text-decoration: line-through; }
+.month-calendar-diary { background: #fbf5e9; color: #78643d; }
+.month-calendar-diary-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #ba9651; }
+.month-calendar-more { justify-self: start; padding: 2px 6px; border: 0; background: transparent; color: var(--muted); font-size: .7rem; }
+.month-calendar-more:hover { color: var(--accent-dark); }
+.month-calendar-diary { text-decoration: none; }
+.calendar-view-week .month-calendar-grid, .calendar-view-day .month-calendar-grid { grid-auto-rows: minmax(480px, auto); }
+.calendar-view-week .month-calendar-events { gap: 7px; }
+.calendar-view-week .month-calendar-event { align-items: flex-start; padding: 7px; }
+.calendar-view-week .month-calendar-event-title, .calendar-view-day .month-calendar-event-title { white-space: normal; overflow-wrap: anywhere; }
+.calendar-view-week .month-calendar-check { margin-top: 1px; }
+.calendar-view-day .month-calendar-weekdays, .calendar-view-day .month-calendar-week { grid-template-columns: minmax(0, 1fr); }
+.calendar-view-day .month-calendar-day { border-right: 0; }
+.calendar-view-day .month-calendar-events { width: min(100%, 900px); align-self: center; gap: 10px; padding: 12px 24px 32px; }
+.calendar-view-day .month-calendar-event, .calendar-view-day .month-calendar-diary { min-height: 44px; padding: 12px 16px; gap: 10px; }
+.calendar-view-day .month-calendar-event-title, .calendar-view-day .month-calendar-diary > span:last-child { font-size: .9rem; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.calendar-view-day .month-calendar-diary { align-items: baseline; margin-top: 8px; }
+.calendar-day-empty { margin: 8px; color: var(--muted); font-size: .75rem; line-height: 1.6; }
+
+
+
+.calendar-day-number {
+  line-height: 18px;
+}
+
+.calendar-day-details {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 12px;
+}
+
+.calendar-today-label {
   font-size: 0.62rem;
+  line-height: 12px;
 }
 
 .calendar-markers {
-  position: absolute;
-  left: 50%;
-  bottom: 5px;
   display: flex;
+  align-items: center;
   gap: 2px;
-  transform: translateX(-50%);
-}
-
-.calendar-day small + .calendar-markers {
-  left: 8px;
-  transform: none;
 }
 
 .marker {
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: currentColor;
 }
@@ -1259,6 +1337,20 @@ button:disabled { cursor: default; opacity: .5; }
   .life-grid { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-flow: row; padding: 18px 8px; }
 }
 
+@media (max-width: 720px) {
+  .month-calendar-scroll { overscroll-behavior-x: contain; }
+  .month-calendar-weekdays, .month-calendar-grid { min-width: 760px; }
+  .month-calendar-toolbar { align-items: flex-start; flex-direction: column; padding: 18px 16px; }
+  .month-calendar-toolbar h1 { font-size: 1.3rem; }
+  .month-calendar-actions { width: 100%; justify-content: flex-end; gap: 10px; }
+  .month-calendar-actions .month-add-button { margin-right: auto; }
+  .calendar-view-day .month-calendar-weekdays, .calendar-view-day .month-calendar-grid { min-width: 0; }
+  .calendar-view-day .month-calendar-events { padding: 8px 12px 24px; }
+  .month-quick-add { align-items: stretch; flex-wrap: wrap; margin: 0 16px 14px; }
+  .month-quick-add label { width: 100%; }
+  .month-quick-add input { flex-basis: 180px; }
+}
+
 @media (max-width: 520px) {
   .app-shell {
     padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom))
@@ -1308,4 +1400,86 @@ button:disabled { cursor: default; opacity: .5; }
   .age-label {
     font-size: 0.62rem;
   }
+}
+
+.calendar-header-actions { display: flex; align-items: center; gap: 2px; }
+.calendar-panel .panel-header { gap: 5px; }
+.calendar-panel .panel-header h2 { white-space: nowrap; }
+.calendar-header-actions a, .month-calendar-page .header-pills a { text-decoration: none; }
+.checklist-workspace { display: grid; grid-template-columns: 230px minmax(270px, 1fr) 310px; min-height: 580px; overflow: hidden; }
+.checklist-sidebar { min-width: 0; padding: 20px 14px; border-right: 1px solid var(--line); background: #fbfbf8; }
+.checklist-group-link { display: flex; width: 100%; align-items: center; gap: 10px; min-height: 45px; padding: 10px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); text-align: left; }
+.checklist-group-link:hover { background: #f0f2ec; }
+.checklist-group-link[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-dark); }
+.checklist-group-link > svg { flex-shrink: 0; }
+.checklist-group-link > span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .88rem; }
+.checklist-group-link > small { color: var(--muted); font-size: .73rem; }
+.checklist-sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin: 25px 10px 10px; }
+.checklist-sidebar-heading h2 { margin: 0; color: var(--muted); font-size: .76rem; font-weight: 500; }
+.checklist-sidebar-heading small { color: var(--muted); font-size: .67rem; }
+.checklist-group-links { display: grid; gap: 3px; }
+.checklist-new-group { display: flex; align-items: center; gap: 5px; margin-top: 15px; }
+.checklist-new-group input { min-width: 0; width: 100%; min-height: 38px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); font-size: .8rem; }
+.checklist-new-group .icon-button { width: 34px; min-height: 34px; flex: 0 0 34px; }
+.checklist-content { min-width: 0; padding: 24px 22px; }
+.checklist-content-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.checklist-content-heading h2 { margin: 0; overflow-wrap: anywhere; font-size: 1.25rem; font-weight: 600; }
+.checklist-content-heading p { margin: 8px 0 0; color: var(--muted); font-size: .73rem; }
+.checklist-content-heading .secondary { flex-shrink: 0; min-height: 34px; border: 1px solid var(--line); border-radius: 8px; font-size: .73rem; }
+.checklist-add-task { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 10px; background: var(--paper); color: var(--muted); }
+.checklist-add-task > svg { flex-shrink: 0; }
+.checklist-add-task input { width: 100%; min-width: 0; min-height: 34px; padding: 0; border: 0; background: transparent; color: var(--ink); font-size: .83rem; }
+.checklist-add-task button { min-height: 34px; flex-shrink: 0; padding: 0 10px; border: 0; border-radius: 7px; font-size: .76rem; }
+.checklist-rows { margin-top: 14px; }
+.checklist-row { display: flex; min-height: 53px; align-items: center; gap: 11px; padding: 5px 10px; border-bottom: 1px solid #eff0eb; border-radius: 5px; }
+.checklist-row.selected { background: #f2f5ef; }
+.checklist-checkbox { position: relative; display: grid; place-items: center; flex: 0 0 19px; cursor: pointer; }
+.checklist-checkbox input { position: absolute; width: 19px; height: 19px; margin: 0; opacity: 0; cursor: pointer; }
+.checklist-checkbox > span { display: grid; place-items: center; width: 19px; height: 19px; border: 1px solid #b4beb0; border-radius: 5px; color: white; pointer-events: none; }
+.checklist-checkbox input:checked + span { border-color: var(--accent); background: var(--accent); }
+.checklist-checkbox input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 3px; }
+.checklist-row-title { display: flex; min-width: 0; width: 100%; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; padding: 4px 0; border: 0; background: transparent; color: var(--ink); text-align: left; font-size: .87rem; }
+.checklist-row-title span { overflow-wrap: anywhere; }
+.checklist-row-title small { flex-shrink: 0; color: var(--muted); font-size: .65rem; }
+.checklist-row.completed .checklist-row-title > span { color: #969c92; text-decoration: line-through; }
+.checklist-completed { margin-top: 28px; }
+.checklist-completed summary { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; color: var(--muted); font-size: .8rem; cursor: pointer; list-style: none; }
+.checklist-completed summary::-webkit-details-marker { display: none; }
+.checklist-completed:not([open]) summary svg { transform: rotate(-90deg); }
+.checklist-detail, .checklist-detail-empty { min-width: 0; border-left: 1px solid var(--line); padding: 22px; }
+.checklist-detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #9aa392; text-align: center; }
+.checklist-detail-empty p { font-size: .78rem; line-height: 1.8; }
+.checklist-detail-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.checklist-detail-heading h2 { margin: 0; font-size: .88rem; font-weight: 500; color: var(--muted); }
+.checklist-detail .icon-button { width: 32px; min-height: 32px; flex-shrink: 0; }
+.checklist-detail form { display: grid; gap: 20px; }
+.checklist-detail label { display: grid; gap: 8px; color: var(--muted); font-size: .73rem; }
+.checklist-detail input, .checklist-detail select, .checklist-detail textarea, .checklist-manage-group input { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font-size: .85rem; }
+.checklist-detail textarea { resize: vertical; line-height: 1.7; }
+.checklist-detail-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.checklist-detail-actions .primary { min-height: 38px; border: 0; border-radius: 8px; font-size: .8rem; }
+.checklist-manage-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; }
+.checklist-manage-group input { flex: 1 1 150px; }
+.checklist-manage-group button { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; font-size: .73rem; }
+.checklist-delete-group { color: var(--rose); background: white; }
+.checklist-manage-group small { width: 100%; color: var(--muted); font-size: .67rem; }
+.checklist-empty { display: grid; justify-items: center; gap: 12px; padding: 65px 10px; color: #97a28f; text-align: center; }
+.checklist-empty strong { color: var(--ink); font-size: .9rem; font-weight: 500; }
+.checklist-empty p { margin: 0; color: var(--muted); font-size: .75rem; line-height: 1.8; }
+.checklist-error { color: var(--rose); }
+.checklist-notice { color: var(--accent-dark); font-size: .83rem; }
+@media (max-width: 1100px) {
+  .checklist-workspace { grid-template-columns: 200px minmax(0, 1fr); }
+  .checklist-detail-empty { display: none; }
+  .checklist-detail { grid-column: 2; border-top: 1px solid var(--line); }
+  .checklist-sidebar { grid-row: 1 / 3; }
+}
+@media (max-width: 620px) {
+  .checklist-workspace { grid-template-columns: minmax(0, 1fr); }
+  .checklist-sidebar { grid-row: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .checklist-group-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .checklist-sidebar-heading { margin-top: 16px; }
+  .checklist-content, .checklist-detail { padding: 20px 14px; }
+  .checklist-detail { grid-column: 1; border-left: 0; }
+  .checklist-detail input, .checklist-detail textarea, .checklist-detail select, .checklist-add-task input, .checklist-new-group input { font-size: 16px; }
 }

@@ -1,7 +1,8 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import { useMemo } from "react";
-import { buildMonthGrid, displayMonth, isoDate, nextMonth, previousMonth } from "../lib/date";
+import { buildMonthGrid, displayMonth, nextMonth, previousMonth } from "../lib/date";
 import type { CalendarDayStatus, ISODate } from "../types";
+import { AppLink } from "../lib/router";
 
 interface CalendarProps {
   month: Date;
@@ -30,6 +31,7 @@ export function Calendar({ month, selectedDate, statuses, onMonthChange, onSelec
           <ChevronLeft size={18} />
         </button>
         <h2>{displayMonth(month)}</h2>
+        <div className="calendar-header-actions">
         <button
           className="icon-button"
           type="button"
@@ -39,6 +41,8 @@ export function Calendar({ month, selectedDate, statuses, onMonthChange, onSelec
         >
           <ChevronRight size={18} />
         </button>
+        <AppLink href="/calendar" className="icon-button" aria-label="放大日历" title="放大日历"><Maximize2 size={15} aria-hidden="true" /></AppLink>
+        </div>
       </div>
 
       <div className="calendar-weekdays" aria-hidden="true">
@@ -74,17 +78,20 @@ export function Calendar({ month, selectedDate, statuses, onMonthChange, onSelec
               type="button"
               onClick={() => onSelectDate(day.iso)}
               aria-pressed={selected}
+              aria-current={day.isToday ? "date" : undefined}
               aria-label={`${day.iso}${day.isToday ? " 今天" : ""}${statusLabel ? ` ${statusLabel}` : ""}`}
             >
-              <span>{day.date.getDate()}</span>
-              {day.iso === isoDate(today) ? <small>今</small> : null}
-              {status ? (
-                <span className="calendar-markers" aria-hidden="true">
-                  {status.hasDiary ? <i className="marker diary" /> : null}
-                  {status.hasImages ? <i className="marker image" /> : null}
-                  {status.todoCount > 0 ? <i className={status.openTodoCount > 0 ? "marker todo open" : "marker todo"} /> : null}
-                </span>
-              ) : null}
+              <span className="calendar-day-number">{day.date.getDate()}</span>
+              <span className="calendar-day-details" aria-hidden="true">
+                {day.isToday ? <small className="calendar-today-label">今</small> : null}
+                {status ? (
+                  <span className="calendar-markers">
+                    {status.hasDiary ? <i className="marker diary" /> : null}
+                    {status.hasImages ? <i className="marker image" /> : null}
+                    {status.todoCount > 0 ? <i className={status.openTodoCount > 0 ? "marker todo open" : "marker todo"} /> : null}
+                  </span>
+                ) : null}
+              </span>
             </button>
           );
         })}
