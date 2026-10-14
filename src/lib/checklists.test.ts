@@ -1,10 +1,25 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createChecklistGroup, createChecklistItem, deleteChecklistGroup, listChecklists, renameChecklistGroup, updateChecklistItem } from "./checklists";
 import { addTodo, createBackupPayload, db, listCalendarStatuses, restoreBackupPayload } from "./db";
 
 beforeEach(async () => { await db.delete(); await db.open(); });
 
 describe("undated checklists", () => {
+  it("creates groups and tasks over HTTP when randomUUID is unavailable", async () => {
+    vi.stubGlobal("crypto", { randomUUID: undefined });
+    try {
+      const group = await createChecklistGroup("HTTP 清单");
+      const first = await createChecklistItem(group.id, "第一项");
+      const second = await createChecklistItem(group.id, "第二项");
+      expect(new Set([group.id, first.id, second.id]).size).toBe(3);
+      expect((await listChecklists()).items).toHaveLength(2);
+      db.close(); await db.open();
+      expect((await db.checklistItems.get(first.id))?.title).toBe("第一项");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("supports more than nine groups and keeps tasks out of the daily calendar", async () => {
     const groups = await Promise.all(Array.from({ length: 12 }, (_, index) => createChecklistGroup(`分组 ${index + 1}`)));
     const item = await createChecklistItem(groups[11].id, "一个长期想法");

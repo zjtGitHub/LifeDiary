@@ -2,6 +2,8 @@ import { isValidSchedule } from "./schedules";
 import { db } from "./db";
 import type { ChecklistGroup, ChecklistItem } from "../types";
 
+const createId = () => typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 export const listChecklists = async () => {
   const [groups, items] = await Promise.all([
     db.checklistGroups.orderBy("createdAt").toArray(),
@@ -13,7 +15,7 @@ export const listChecklists = async () => {
 export const createChecklistGroup = async (name: string): Promise<ChecklistGroup> => {
   if (!name.trim()) throw new Error("请输入分组名称");
   const timestamp = new Date().toISOString();
-  const group = { id: crypto.randomUUID(), name: name.trim(), createdAt: timestamp, updatedAt: timestamp };
+  const group = { id: createId(), name: name.trim(), createdAt: timestamp, updatedAt: timestamp };
   await db.checklistGroups.add(group);
   return group;
 };
@@ -35,7 +37,7 @@ export const createChecklistItem = async (groupId: string, title: string): Promi
   return db.transaction("rw", db.checklistGroups, db.checklistItems, async () => {
     if (groupId && !await db.checklistGroups.get(groupId)) throw new Error("分组不存在");
     const timestamp = new Date().toISOString();
-    const item: ChecklistItem = { id: crypto.randomUUID(), groupId, title: title.trim(), notes: "", completed: false, createdAt: timestamp, updatedAt: timestamp };
+    const item: ChecklistItem = { id: createId(), groupId, title: title.trim(), notes: "", completed: false, createdAt: timestamp, updatedAt: timestamp };
     await db.checklistItems.add(item);
     return item;
   });
