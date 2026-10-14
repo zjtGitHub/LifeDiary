@@ -1,13 +1,13 @@
-import { CalendarDays, BookOpen, ChartNoAxesCombined, HardDrive, ListChecks, NotebookPen, ScrollText } from "lucide-react";
+import { CalendarDays, BookOpen, ChartNoAxesCombined, HardDrive, ListChecks, NotebookPen, Sprout, ScrollText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DataBackup } from "./components/DataBackup";
 import { StockWorkspace } from "./components/stocks/StockWorkspace";
-import { AppLink, usePathname } from "./lib/router";
+import { AppLink, navigate, usePathname } from "./lib/router";
 import { Calendar } from "./components/Calendar";
 import { MonthCalendar } from "./components/MonthCalendar";
 import { TaskList } from "./components/TaskList";
 import { DayPanel } from "./components/DayPanel";
-import { LifeGrid } from "./components/LifeGrid";
+import { LifePage } from "./components/life/LifePage";
 import { MonthTimeline } from "./components/MonthTimeline";
 import { SearchPanel } from "./components/SearchPanel";
 import {
@@ -17,19 +17,16 @@ import {
   deleteTodo,
   emptyDayEntry,
   getDayEntry,
-  getProfile,
-  getWeekSummary,
   listAllTags,
   listCalendarStatuses,
   listTodosByDate,
-  saveBirthDate,
   saveDayTags,
   saveDayText,
   searchEntries,
   setTodoCompleted
 } from "./lib/db";
 import { buildMonthGrid, isoDate, parseISODate } from "./lib/date";
-import type { CalendarDayStatus, DayEntry, ISODate, Profile, SearchResult, TodoItem, WeekSummary } from "./types";
+import type { CalendarDayStatus, DayEntry, ISODate, SearchResult, TodoItem } from "./types";
 
 interface DiaryPageProps {
   active: boolean;
@@ -43,7 +40,6 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
   const [entry, setEntry] = useState<DayEntry>(() => emptyDayEntry(selectedDate));
   const [text, setText] = useState("");
   const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [profile, setProfile] = useState<Profile>({ id: "me" });
   const [saveStatus, setSaveStatus] = useState("已加载");
   const [isLoadingDay, setIsLoadingDay] = useState(true);
   const [calendarStatuses, setCalendarStatuses] = useState<Record<ISODate, CalendarDayStatus>>({});
@@ -51,8 +47,6 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [overviewVersion, setOverviewVersion] = useState(0);
-  const [selectedWeekRange, setSelectedWeekRange] = useState<{ startDate: ISODate; endDate: ISODate } | null>(null);
-  const [weekSummary, setWeekSummary] = useState<WeekSummary | null>(null);
   const [isMonthTimelineOpen, setIsMonthTimelineOpen] = useState(false);
   useEffect(() => {
     const pause = () => setIsLoadingDay(true);
@@ -89,23 +83,6 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
   useEffect(() => {
     let alive = true;
 
-    const loadProfile = async () => {
-      const nextProfile = await getProfile();
-      if (alive) {
-        setProfile(nextProfile);
-      }
-    };
-
-    loadProfile();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-
     const loadSearchResults = async () => {
       const results = await searchEntries(searchQuery);
       if (alive) {
@@ -119,28 +96,6 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
       alive = false;
     };
   }, [overviewVersion, searchQuery]);
-
-  useEffect(() => {
-    let alive = true;
-
-    const loadWeekSummary = async () => {
-      if (!selectedWeekRange) {
-        setWeekSummary(null);
-        return;
-      }
-
-      const summary = await getWeekSummary(selectedWeekRange.startDate, selectedWeekRange.endDate);
-      if (alive) {
-        setWeekSummary(summary);
-      }
-    };
-
-    loadWeekSummary();
-
-    return () => {
-      alive = false;
-    };
-  }, [overviewVersion, selectedWeekRange]);
 
   useEffect(() => {
     let alive = true;
@@ -180,23 +135,9 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
     return () => window.clearTimeout(timeout);
   }, [entry.text, isLoadingDay, selectedDate, text]);
 
-  const applyDateSelection = (date: ISODate) => {
+  const handleSelectDate = (date: ISODate) => {
     setSelectedDate(date);
     setMonth(parseISODate(date));
-  };
-
-  const handleSelectDate = (date: ISODate) => {
-    setSelectedWeekRange(null);
-    applyDateSelection(date);
-  };
-
-  const handleSelectSummaryDate = (date: ISODate) => {
-    applyDateSelection(date);
-  };
-
-  const handleSelectLifeWeek = (startDate: ISODate, endDate: ISODate) => {
-    setSelectedWeekRange({ startDate, endDate });
-    applyDateSelection(startDate);
   };
 
   const handleTagsChange = async (tags: string[]) => {
@@ -236,11 +177,6 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
     await deleteTodo(id);
     await refreshTodos();
     await refreshOverview();
-  };
-
-  const handleSaveBirthDate = async (birthDate: ISODate) => {
-    const nextProfile = await saveBirthDate(birthDate);
-    setProfile(nextProfile);
   };
 
   return (
@@ -294,15 +230,6 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
           />
           <DataBackup />
         </aside>
-
-        <LifeGrid
-          birthDate={profile.birthDate}
-          selectedDate={selectedDate}
-          weekSummary={weekSummary}
-          onSaveBirthDate={handleSaveBirthDate}
-          onSelectDate={handleSelectSummaryDate}
-          onSelectWeek={handleSelectLifeWeek}
-        />
       </div>
       {isMonthTimelineOpen && active ? <MonthTimeline initialYear={Number(selectedDate.slice(0, 4))}
         overviewVersion={overviewVersion} onClose={() => setIsMonthTimelineOpen(false)} onSelectDate={handleSelectDate} /> : null}
@@ -324,7 +251,8 @@ function App() {
   const stockRoute = /^\/stocks(?:\/([^/]+))?\/?$/.exec(path);
   const isCalendarRoute = path === "/calendar";
   const isTaskListRoute = path === "/list";
-  useEffect(() => { document.title = isCalendarRoute ? "日历 · 时光日记" : isTaskListRoute ? "清单 · 时光日记" : stockRoute ? "股票备忘录 · 时光日记" : "日记 · 时光日记"; }, [path]);
+  const isLifeRoute = path === "/life";
+  useEffect(() => { document.title = isLifeRoute ? "人生 · 时光日记" : isCalendarRoute ? "日历 · 时光日记" : isTaskListRoute ? "清单 · 时光日记" : stockRoute ? "股票备忘录 · 时光日记" : "日记 · 时光日记"; }, [path]);
   const handleCalendarDateSelect = (date: ISODate) => {
     setSelectedDate(date);
     setMonth(parseISODate(date));
@@ -336,6 +264,7 @@ function App() {
         <AppLink href="/" aria-current={path === "/" ? "page" : undefined}><NotebookPen size={16} aria-hidden="true" />日记</AppLink>
         <AppLink href="/calendar" aria-current={isCalendarRoute ? "page" : undefined}><CalendarDays size={16} aria-hidden="true" />日历</AppLink>
         <AppLink href="/list" aria-current={isTaskListRoute ? "page" : undefined}><ListChecks size={16} aria-hidden="true" />清单</AppLink>
+        <AppLink href="/life" aria-current={isLifeRoute ? "page" : undefined}><Sprout size={16} aria-hidden="true" />人生</AppLink>
         <AppLink href="/stocks" aria-current={stockRoute ? "page" : undefined}><ChartNoAxesCombined size={16} aria-hidden="true" />股票备忘录</AppLink>
       </div>
       <span className="app-storage-note"><HardDrive size={14} aria-hidden="true" />本地保存<span className="storage-status-dot" aria-hidden="true" /></span>
@@ -344,8 +273,12 @@ function App() {
     <div hidden={path !== "/"}><DiaryPage key={dataVersion} active={path === "/"} selectedDate={selectedDate} setSelectedDate={setSelectedDate} month={month} setMonth={setMonth} /></div>
     {isTaskListRoute ? <TaskList key={dataVersion} /> : null}
     {isCalendarRoute ? <MonthCalendar month={month} selectedDate={selectedDate} onMonthChange={setMonth} onSelectDate={handleCalendarDateSelect} /> : null}
+    {isLifeRoute ? <LifePage key={dataVersion} selectedDate={selectedDate} onSelectDiaryDate={date => {
+      handleCalendarDateSelect(date);
+      navigate("/");
+    }} /> : null}
     {stockRoute ? <StockWorkspace key={dataVersion} stockId={stockRoute[1]} /> : null}
-    {!stockRoute && path !== "/" && !isCalendarRoute && !isTaskListRoute ? <main className="app-shell"><h1>页面不存在</h1><AppLink href="/">返回日记</AppLink></main> : null}
+    {!stockRoute && path !== "/" && !isCalendarRoute && !isTaskListRoute && !isLifeRoute ? <main className="app-shell"><h1>页面不存在</h1><AppLink href="/">返回日记</AppLink></main> : null}
   </>;
 }
 

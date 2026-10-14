@@ -104,8 +104,8 @@ button {
 .workspace {
   display: grid;
   grid-template-columns: 290px minmax(0, 1fr);
-  grid-template-areas: "calendar day" "tools day" "life life";
-  grid-template-rows: auto 1fr auto;
+  grid-template-areas: "calendar day" "tools day";
+  grid-template-rows: auto 1fr;
   align-items: start;
   gap: 24px;
 }
@@ -403,11 +403,6 @@ button {
 .todo-panel,
 .life-panel {
   padding: 24px;
-}
-
-.workspace > .life-panel {
-  grid-column: 1 / -1;
-  grid-area: life;
 }
 
 .diary-panel textarea {
@@ -1287,7 +1282,7 @@ button:disabled { cursor: default; opacity: .5; }
     grid-template-columns: 1fr;
   }
 
-  .workspace { grid-template-areas: "calendar" "day" "tools" "life"; grid-template-rows: auto; }
+  .workspace { grid-template-areas: "calendar" "day" "tools"; grid-template-rows: auto; }
 
   .calendar-panel {
     order: -3;

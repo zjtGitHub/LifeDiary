@@ -5,7 +5,7 @@
 .app-brand-name { display: grid; gap: 5px; font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; letter-spacing: .06em; }
 .app-brand-name small { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: .6rem; font-weight: 400; letter-spacing: .14em; color: var(--muted); }
 .app-nav-links { display: flex; align-items: center; gap: 5px; margin-left: 22px; padding: 5px; border: 1px solid var(--line); border-radius: 12px; background: #eeeee8; }
-.app-nav-links a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 17px; border-radius: 8px; color: var(--muted); font-size: .82rem; font-weight: 500; transition: color 160ms ease, background 160ms ease; }
+.app-nav-links a { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 17px; border-radius: 8px; color: var(--muted); font-size: .82rem; font-weight: 500; transition: color 160ms ease, background 160ms ease; }
 .app-nav-links a:hover { color: var(--accent-dark); }
 .app-nav-links a[aria-current="page"] { background: var(--paper-strong); color: var(--accent-dark); box-shadow: 0 2px 5px rgba(32, 48, 39, .06); }
 .app-storage-note { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; color: var(--muted); font-size: .7rem; }
@@ -169,6 +169,8 @@
   .stock-detail-header { padding: 22px 20px 18px; }
   .stock-management { padding: 0 20px 20px; }
   .stock-filters { padding: 18px 16px; }
+  .app-nav-links { width: 100%; margin-left: 0; overflow-x: auto; }
+  .app-nav-links a { flex: 1 0 auto; }
   .app-brand-name small { display: none; }
   .app-nav-links a svg { display: none; }
   .stock-empty { padding: 28px 20px; }

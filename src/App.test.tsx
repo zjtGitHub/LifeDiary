@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { addTodo, db, saveBirthDate, saveDayText } from "./lib/db";
@@ -6,6 +6,7 @@ import { addTodo, db, saveBirthDate, saveDayText } from "./lib/db";
 describe("App", () => {
   beforeEach(async () => {
     window.history.replaceState(null, "", "/");
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
     vi.setSystemTime(new Date("2026-05-05T08:00:00"));
     await db.delete();
     await db.open();
@@ -49,17 +50,69 @@ describe("App", () => {
     await waitFor(() => expect(screen.queryByAltText("photo.png")).not.toBeInTheDocument());
   });
 
-  it("jumps the calendar and diary date when a life week is clicked", async () => {
+  it("reviews a life week on its own page and opens a chosen day in the diary", async () => {
     await saveBirthDate("2000-01-01");
     await saveDayText("2000-01-15", "这一周开始的日记");
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /0 岁第 3 周，2000-01-15/ }));
+    expect(screen.queryByLabelText("人生表格")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "人生" }));
+    expect(screen.getByRole("link", { name: "人生" })).toHaveAttribute("aria-current", "page");
+    expect(document.title).toBe("人生 · 时光日记");
+    fireEvent.click(await screen.findByLabelText("0 岁第 3 周，2000-01-15 到 2000-01-21"));
 
+    const summary = await screen.findByLabelText("周回顾");
+    expect(window.location.pathname).toBe("/life");
+    expect(within(summary).getByText("2000-01-15 到 2000-01-21")).toBeInTheDocument();
+    expect(within(summary).getByText("1 天日记")).toBeInTheDocument();
+    expect(screen.getByLabelText("日记正文")).toHaveValue("");
+    fireEvent.click(within(summary).getByRole("button", { name: "打开 2000-01-15 的日记" }));
+
+    expect(window.location.pathname).toBe("/");
     await waitFor(() => expect(screen.getByText("2000年1月")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByLabelText("日记正文")).toHaveValue("这一周开始的日记"));
-  });
+
+    fireEvent.click(screen.getByRole("link", { name: "人生" }));
+    fireEvent.click(await screen.findByLabelText("0 岁第 3 周，2000-01-15 到 2000-01-21"));
+    expect(within(await screen.findByLabelText("周回顾")).getByText("这一周开始的日记")).toBeInTheDocument();
+  }, 15000);
+
+  it("opens the life route directly and saves the birthday across page visits and data restores", async () => {
+    window.history.replaceState(null, "", "/life");
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "人生" })).toBeInTheDocument();
+    const birthday = await screen.findByLabelText("生日");
+    expect(screen.getByText("保存生日后，这里会显示按 100 岁计算的人生周表格。")).toBeInTheDocument();
+    fireEvent.change(birthday, { target: { value: "2000-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await screen.findByLabelText(/已经历 .* 周，共 .* 周/);
+    expect((await db.profile.get("me"))?.birthDate).toBe("2000-01-01");
+
+    fireEvent.click(screen.getByRole("link", { name: "日记" }));
+    expect(screen.queryByLabelText("人生表格")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "人生" }));
+    expect(await screen.findByLabelText("生日")).toHaveValue("2000-01-01");
+
+    await saveBirthDate("1990-06-01");
+    fireEvent(window, new Event("diary-data-restored"));
+    await waitFor(() => expect(screen.getByLabelText("生日")).toHaveValue("1990-06-01"));
+  }, 15000);
+
+  it("refreshes a life week after shared diary data changes", async () => {
+    await saveBirthDate("2000-01-01");
+    window.history.replaceState(null, "", "/life");
+    render(<App />);
+    fireEvent.click(await screen.findByLabelText("0 岁第 3 周，2000-01-15 到 2000-01-21"));
+    expect(within(await screen.findByLabelText("周回顾")).getByText("0 天日记")).toBeInTheDocument();
+
+    await saveDayText("2000-01-17", "更新后的周中记录");
+    fireEvent(window, new Event("diary-data-changed"));
+    const summary = await screen.findByLabelText("周回顾", {}, { timeout: 5000 });
+    expect(within(summary).getByText("更新后的周中记录")).toBeInTheDocument();
+    expect(within(summary).getByText("1 天日记")).toBeInTheDocument();
+  }, 15000);
 
   it("opens the enlarged calendar from the small calendar and keeps undated lists separate", async () => {
     const todo = await addTodo("2026-05-06", "当天的计划");

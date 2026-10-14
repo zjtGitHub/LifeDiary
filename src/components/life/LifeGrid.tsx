@@ -1,7 +1,8 @@
 import { Save } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { calculateLifeStats, isValidBirthDate } from "../lib/life";
-import type { ISODate, WeekSummary } from "../types";
+import { LifeWeekGrid } from "./LifeWeekGrid";
+import { calculateLifeStats, isValidBirthDate } from "../../lib/life";
+import type { ISODate, WeekSummary } from "../../types";
 
 interface LifeGridProps {
   birthDate?: ISODate;
@@ -42,7 +43,11 @@ export function LifeGrid({
       return;
     }
     setError("");
-    await onSaveBirthDate(draft);
+    try {
+      await onSaveBirthDate(draft);
+    } catch {
+      setError("生日保存失败，请重试。");
+    }
   };
 
   return (
@@ -51,6 +56,7 @@ export function LifeGrid({
         <div>
           <p className="eyebrow">100 岁人生表格</p>
           <h2>一周一个方块</h2>
+          <p>点击周格子查看这一周，再点击某一天打开日记。</p>
         </div>
       </div>
 
@@ -106,6 +112,7 @@ export function LifeGrid({
                     className={day.date === selectedDate ? "summary-day selected" : "summary-day"}
                     key={day.date}
                     type="button"
+                    aria-label={`打开 ${day.date} 的日记`}
                     onClick={() => onSelectDate(day.date)}
                   >
                     <strong>{day.date}</strong>
@@ -135,29 +142,7 @@ export function LifeGrid({
             </span>
           </div>
 
-          <div className="life-grid" role="group" aria-label={`已经历 ${stats.livedWeeks} 周，共 ${stats.totalWeeks} 周`}>
-            {stats.rows.map((row) => (
-              <div className="life-row" key={row.age}>
-                <span className="age-label">{row.age}</span>
-                <div className="week-row">
-                  {row.weeks.map((week) => {
-                    const isSelectedWeek = selectedDate >= week.startDate && selectedDate <= week.endDate;
-
-                    return (
-                      <button
-                        className={`week-cell ${week.status}${isSelectedWeek ? " selected-date" : ""}`}
-                        key={week.index}
-                        type="button"
-                        onClick={() => onSelectWeek(week.startDate, week.endDate)}
-                        aria-label={`${week.age} 岁第 ${week.weekInYear + 1} 周，${week.startDate} 到 ${week.endDate}`}
-                        title={`${week.age} 岁 第 ${week.weekInYear + 1} 周｜${week.startDate} 到 ${week.endDate}`}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+          <LifeWeekGrid stats={stats} selectedDate={selectedDate} onSelectWeek={onSelectWeek} />
         </>
       ) : (
         <p className="empty-copy">保存生日后，这里会显示按 100 岁计算的人生周表格。</p>
