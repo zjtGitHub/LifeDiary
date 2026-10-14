@@ -23,6 +23,25 @@ export interface TodoItem {
   completed: boolean;
   createdAt: string;
   updatedAt: string;
+  checklistItemId?: string;
+  time?: string;
+  endTime?: string;
+}
+
+export interface ChecklistSchedule {
+  date: ISODate;
+  time?: string;
+  endTime?: string;
+  repeat: "none" | "daily" | "weekly" | "monthly";
+  weekdays?: number[];
+  until?: ISODate;
+}
+
+export interface ChecklistOccurrence {
+  itemId: string;
+  date: ISODate;
+  completed: boolean;
+  updatedAt: string;
 }
 
 export interface ChecklistGroup {
@@ -40,6 +59,7 @@ export interface ChecklistItem {
   completed: boolean;
   createdAt: string;
   updatedAt: string;
+  schedule?: ChecklistSchedule | null;
 }
 
 export interface Profile {

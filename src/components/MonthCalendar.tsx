@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { addTodo, getCalendarMonthData, setTodoCompleted } from "../lib/db";
 import { buildCalendarDays, displayDate, displayMonth, isoDate, moveCalendarDate, parseISODate, type CalendarView } from "../lib/date";
 import type { DayEntry, ISODate, TodoItem } from "../types";
+import { scheduleTimeLabel } from "../lib/schedules";
 import { AppLink } from "../lib/router";
 
 interface MonthCalendarProps {
@@ -39,7 +40,9 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
         setTodos(data.todos);
       }
     });
-    return () => { alive = false; };
+    const refresh = () => setRefreshVersion(version => version + 1);
+    window.addEventListener("diary-data-changed", refresh);
+    return () => { alive = false; window.removeEventListener("diary-data-changed", refresh); };
   }, [firstDay.iso, lastDay.iso, refreshVersion]);
 
   const selectDate = (date: Date) => {
@@ -133,9 +136,9 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
                       <div className="month-calendar-events">
                         {visibleTodos.map((todo) => (
                           <button className={`month-calendar-event${todo.completed ? " completed" : ""}`} type="button" key={todo.id}
-                            onClick={() => void handleToggleTodo(todo)} aria-label={`${todo.completed ? "标记未完成" : "完成计划"}：${todo.title}`} title={todo.title}>
+                            onClick={() => void handleToggleTodo(todo)} aria-label={`${todo.completed ? "标记未完成" : "完成计划"}：${todo.title}`} title={`${todo.title}${todo.checklistItemId ? ` · ${scheduleTimeLabel(todo)} · 来自清单` : ""}`}>
                             <span className="month-calendar-check" aria-hidden="true">{todo.completed ? <Check size={11} strokeWidth={3} /> : null}</span>
-                            <span className="month-calendar-event-title">{todo.title}</span>
+                            <span className="month-calendar-event-title">{todo.time ? <span className="calendar-event-time">{view === "month" ? todo.time : scheduleTimeLabel(todo)} </span> : null}{todo.title}</span>
                           </button>
                         ))}
                         {hasDiary ? (

@@ -1,5 +1,7 @@
-import { CircleCheck, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, CircleCheck, Plus, Trash2 } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { AppLink } from "../lib/router";
+import { scheduleTimeLabel } from "../lib/schedules";
 import type { TodoItem } from "../types";
 
 interface TodoListProps {
@@ -58,9 +60,9 @@ export function TodoList({ todos, onAdd, onToggle, onDelete }: TodoListProps) {
                   checked={todo.completed}
                   onChange={(event) => onToggle(todo.id, event.target.checked)}
                 />
-                <span className={todo.completed ? "completed" : ""}>{todo.title}</span>
+                <span className={todo.completed ? "completed" : ""}>{todo.time ? `${scheduleTimeLabel(todo)} · ` : ""}{todo.title}</span>
               </label>
-              <button
+              {todo.checklistItemId ? <AppLink className="icon-button subtle" href="/list" aria-label={`编辑清单安排：${todo.title}`} title="在清单中编辑时间和重复"><CalendarDays size={17} /></AppLink> : <button
                 className="icon-button subtle"
                 type="button"
                 onClick={() => onDelete(todo.id)}
@@ -68,7 +70,7 @@ export function TodoList({ todos, onAdd, onToggle, onDelete }: TodoListProps) {
                 title="删除"
               >
                 <Trash2 size={17} />
-              </button>
+              </button>}
             </article>
           ))
         )}

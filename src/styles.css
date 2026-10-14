@@ -1483,3 +1483,60 @@ button:disabled { cursor: default; opacity: .5; }
   .checklist-detail { grid-column: 1; border-left: 0; }
   .checklist-detail input, .checklist-detail textarea, .checklist-detail select, .checklist-add-task input, .checklist-new-group input { font-size: 16px; }
 }
+
+.checklist-calendar-link { text-decoration: none; border: 1px solid var(--line); border-radius: 999px; font-size: .8rem; }
+.checklist-row-title .checklist-schedule-label { display: flex; align-items: center; gap: 5px; margin-top: 6px; color: var(--accent); font-size: .69rem; line-height: 1.5; }
+.checklist-repeat-icon { display: grid; flex: 0 0 19px; place-items: center; color: var(--accent); }
+.checklist-schedule-setting > button { display: flex; align-items: center; width: 100%; min-height: 44px; gap: 9px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--accent-soft); color: var(--accent-dark); text-align: left; font-size: .8rem; }
+.checklist-schedule-setting > button > span { flex: 1; line-height: 1.6; }
+.checklist-schedule-setting > button > svg { flex-shrink: 0; }
+.checklist-schedule-setting p { margin: 8px 0 0; color: var(--muted); font-size: .7rem; line-height: 1.8; }
+.checklist-schedule-setting a { margin-left: 6px; color: var(--accent); }
+.calendar-event-time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.schedule-backdrop { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; background: rgba(25, 39, 32, .25); backdrop-filter: blur(3px); }
+.schedule-dialog { width: 400px; max-width: 100%; max-height: calc(100dvh - 48px); overflow-y: auto; padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: white; box-shadow: 0 20px 80px rgba(25, 39, 32, .18); color: var(--ink); }
+.schedule-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.schedule-heading h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1rem; font-weight: 600; }
+.schedule-heading .icon-button, .schedule-month-heading .icon-button { width: 30px; min-height: 30px; }
+.schedule-fields { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.schedule-shortcuts { display: flex; gap: 8px; }
+.schedule-shortcuts button { flex: 1; min-height: 34px; border: 0; border-radius: 8px; background: var(--paper); color: var(--muted); font-size: .78rem; }
+.schedule-shortcuts button:hover { background: var(--accent-soft); color: var(--accent); }
+.schedule-month-heading { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+.schedule-month-heading strong { font-size: .95rem; font-weight: 600; }
+.schedule-month-heading > div { display: flex; gap: 6px; }
+.schedule-calendar-weekdays, .schedule-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; text-align: center; }
+.schedule-calendar-weekdays { color: var(--muted); font-size: .73rem; }
+.schedule-calendar { margin-top: -6px; }
+.schedule-calendar button { display: grid; place-items: center; width: 100%; height: 36px; padding: 0; border: 0; border-radius: 18px; background: transparent; color: var(--ink); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.schedule-calendar button:hover { background: var(--paper); }
+.schedule-calendar button.outside-month { color: #b3b7af; }
+.schedule-calendar button.today { font-weight: 700; color: var(--accent); box-shadow: inset 0 0 0 1px var(--line); }
+.schedule-calendar button[aria-pressed="true"] { background: var(--accent); color: white; box-shadow: none; }
+.schedule-date-input, .schedule-repeat { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: .8rem; }
+.schedule-dialog input:not([type="checkbox"]), .schedule-dialog select { width: 155px; min-width: 0; min-height: 35px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); font-size: .8rem; }
+.schedule-option-heading { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--line); font-size: .8rem; }
+.schedule-option-heading > span, .schedule-repeat > span { display: flex; align-items: center; gap: 9px; }
+.schedule-option-heading > label, .schedule-inline-checkbox { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .75rem; }
+.schedule-dialog input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+.schedule-time-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.schedule-time-fields > label:not(.schedule-inline-checkbox) { display: grid; gap: 6px; color: var(--muted); font-size: .73rem; }
+.schedule-time-fields input:not([type="checkbox"]) { width: 100%; }
+.schedule-time-fields .schedule-inline-checkbox { grid-column: 1 / -1; }
+.schedule-repeat { padding-top: 14px; border-top: 1px solid var(--line); }
+.schedule-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; }
+.schedule-weekdays button { min-width: 0; aspect-ratio: 1; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: white; color: var(--muted); font-size: .78rem; }
+.schedule-weekdays button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.schedule-hint { margin: 0; padding: 10px; border-radius: 8px; background: var(--paper); color: var(--muted); font-size: .72rem; line-height: 1.8; }
+.schedule-until { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.schedule-preview { margin: 16px 0; color: var(--accent); font-size: .75rem; line-height: 1.7; }
+.schedule-preview.invalid { color: var(--rose); }
+.schedule-actions { display: flex; gap: 12px; }
+.schedule-actions button { flex: 1; min-height: 42px; border: 1px solid var(--line); border-radius: 10px; font-size: .85rem; }
+.schedule-actions .primary { border-color: var(--accent); }
+@media (max-width: 600px) {
+  .checklist-page .app-header { align-items: flex-start; flex-direction: column; gap: 16px; }
+  .schedule-backdrop { padding: 12px; }
+  .schedule-dialog { max-height: calc(100dvh - 24px); padding: 18px; border-radius: 16px; }
+  .schedule-dialog input:not([type="checkbox"]), .schedule-dialog select { font-size: 16px; }
+}

@@ -1,10 +1,12 @@
 import Dexie, { type Table } from "dexie";
-import { eachDayOfInterval, format, parseISO } from "date-fns";
+import { eachDayOfInterval, endOfMonth, format, parseISO } from "date-fns";
+import { expandChecklistSchedules, isISODate, isValidSchedule, occursOn, parseOccurrenceId, sortPlans } from "./schedules";
 import { decodeStockBackup, encodeStockBackup, type StockBackupData } from "./stock-backup";
 import type {
   CalendarDayStatus,
   ChecklistGroup,
   ChecklistItem,
+  ChecklistOccurrence,
   DayEntry,
   DiaryImage,
   ISODate,
@@ -35,6 +37,7 @@ export class DiaryDatabase extends Dexie {
   todos!: Table<TodoItem, string>;
   checklistGroups!: Table<ChecklistGroup, string>;
   checklistItems!: Table<ChecklistItem, string>;
+  checklistOccurrences!: Table<ChecklistOccurrence, [string, ISODate]>;
   profile!: Table<Profile, "me">;
   monthlyReflections!: Table<MonthlyReflection, string>;
   stocks!: Table<Stock, string>;
@@ -60,6 +63,7 @@ export class DiaryDatabase extends Dexie {
       checklistGroups: "&id, createdAt",
       checklistItems: "&id, groupId, createdAt"
     });
+    this.version(5).stores({ checklistOccurrences: "&[itemId+date], itemId, date" });
   }
 }
 
@@ -166,20 +170,23 @@ export const deleteImageFromDay = async (date: ISODate, imageId: string): Promis
 };
 
 export const listTodosByDate = async (date: ISODate): Promise<TodoItem[]> => {
-  const todos = await db.todos.where("date").equals(date).sortBy("createdAt");
-  return todos;
+  const data = await getCalendarMonthData(date, date);
+  return data.todos[date] ?? [];
 };
 
 export const getCalendarMonthData = async (startDate: ISODate, endDate: ISODate) => {
-  const [entries, todos] = await Promise.all([
+  const [entries, todos, items, occurrences] = await Promise.all([
     db.dayEntries.where("date").between(startDate, endDate, true, true).toArray(),
-    db.todos.where("date").between(startDate, endDate, true, true).toArray()
+    db.todos.where("date").between(startDate, endDate, true, true).toArray(),
+    db.checklistItems.toArray(),
+    db.checklistOccurrences.where("date").between(startDate, endDate, true, true).toArray()
   ]);
   const entriesByDate: Record<ISODate, DayEntry> = {};
   const todosByDate: Record<ISODate, TodoItem[]> = {};
 
   for (const entry of entries) entriesByDate[entry.date] = normalizeDayEntry(entry);
-  for (const todo of todos) (todosByDate[todo.date] ??= []).push(todo);
+  for (const todo of [...todos, ...expandChecklistSchedules(items, occurrences, startDate, endDate)]) (todosByDate[todo.date] ??= []).push(todo);
+  for (const plans of Object.values(todosByDate)) sortPlans(plans);
 
   return { entries: entriesByDate, todos: todosByDate };
 };
@@ -204,18 +211,32 @@ export const addTodo = async (date: ISODate, title: string): Promise<TodoItem> =
 };
 
 export const setTodoCompleted = async (id: string, completed: boolean): Promise<void> => {
-  await db.todos.update(id, {
-    completed,
-    updatedAt: now()
-  });
+  const occurrence = parseOccurrenceId(id);
+  if (occurrence) {
+    await db.transaction("rw", db.checklistItems, db.checklistOccurrences, async () => {
+      const item = await db.checklistItems.get(occurrence.itemId);
+      if (!item?.schedule || !occursOn(item.schedule, occurrence.date)) throw new Error("该安排已变更，请刷新日历");
+      if (item.schedule.repeat === "none") {
+        await db.checklistItems.update(item.id, { completed, updatedAt: now() });
+      } else {
+        await db.checklistOccurrences.put({ ...occurrence, completed, updatedAt: now() });
+      }
+    });
+    return;
+  }
+  await db.todos.update(id, { completed, updatedAt: now() });
 };
 
 export const deleteTodo = async (id: string): Promise<void> => {
   await db.todos.delete(id);
 };
 
-export const listCalendarStatuses = async (): Promise<Record<ISODate, CalendarDayStatus>> => {
-  const [entries, todos] = await Promise.all([db.dayEntries.toArray(), db.todos.toArray()]);
+export const listCalendarStatuses = async (startDate = format(new Date(), "yyyy-MM-01"), endDate = format(endOfMonth(parseISO(startDate)), "yyyy-MM-dd")): Promise<Record<ISODate, CalendarDayStatus>> => {
+  const [entries, dailyTodos, scheduled] = await Promise.all([
+    db.dayEntries.toArray(), db.todos.toArray(),
+    getCalendarMonthData(startDate, endDate)
+  ]);
+  const todos = [...dailyTodos, ...Object.values(scheduled?.todos ?? {}).flat().filter(todo => todo.checklistItemId)];
   const statuses: Record<ISODate, CalendarDayStatus> = {};
 
   const ensureStatus = (date: ISODate): CalendarDayStatus => {
@@ -341,11 +362,12 @@ export const saveMonthlyReflection = async (month: string, text: string): Promis
 export const getYearMonthSummaries = async (year: number): Promise<MonthSummary[]> => {
   const start = `${year}-01-01`;
   const end = `${year}-12-31`;
-  const [entries, todos, reflections] = await Promise.all([
-    db.dayEntries.where("date").between(start, end, true, true).toArray(),
-    db.todos.where("date").between(start, end, true, true).toArray(),
+  const [calendar, reflections] = await Promise.all([
+    getCalendarMonthData(start, end),
     db.monthlyReflections.where("month").between(`${year}-01`, `${year}-12`, true, true).toArray()
   ]);
+  const entries = Object.values(calendar.entries);
+  const todos = Object.values(calendar.todos).flat();
   return Array.from({ length: 12 }, (_, index) => {
     const month = `${year}-${String(index + 1).padStart(2, "0")}`;
     const monthEntries = entries.filter((entry) => entry.date.startsWith(`${month}-`)).map(normalizeDayEntry);
@@ -393,6 +415,7 @@ export interface BackupPayload {
   stockMemo?: StockBackupData;
   checklistGroups?: ChecklistGroup[];
   checklistItems?: ChecklistItem[];
+  checklistOccurrences?: ChecklistOccurrence[];
 }
 
 const blobToDataUrl = (blob: Blob): Promise<string> =>
@@ -410,10 +433,10 @@ const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
 };
 
 export const createBackupPayload = async (): Promise<BackupPayload> => {
-  const [profile, entries, todos, monthlyReflections, stocks, notes, revisions, images, checklistGroups, checklistItems] = await db.transaction("r", db.tables, () => Promise.all([
+  const [profile, entries, todos, monthlyReflections, stocks, notes, revisions, images, checklistGroups, checklistItems, checklistOccurrences] = await db.transaction("r", db.tables, () => Promise.all([
     getProfile(), db.dayEntries.toArray(), db.todos.toArray(), db.monthlyReflections.toArray(),
     db.stocks.toArray(), db.stockNotes.toArray(), db.stockRevisions.toArray(), db.stockImages.toArray(),
-    db.checklistGroups.toArray(), db.checklistItems.toArray()
+    db.checklistGroups.toArray(), db.checklistItems.toArray(), db.checklistOccurrences.toArray()
   ]));
   const stockMemo = await encodeStockBackup({ stocks, notes, revisions, images });
   const dayEntries = await Promise.all(
@@ -449,7 +472,8 @@ export const createBackupPayload = async (): Promise<BackupPayload> => {
     monthlyReflections,
     stockMemo,
     checklistGroups,
-    checklistItems
+    checklistItems,
+    checklistOccurrences
   };
 };
 
@@ -463,9 +487,17 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
   if (!Array.isArray(checklistGroups) || !Array.isArray(checklistItems) ||
     checklistGroups.some(group => !group || typeof group.id !== "string" || !group.id || typeof group.name !== "string" || !group.name.trim() || typeof group.createdAt !== "string" || typeof group.updatedAt !== "string") ||
     new Set(checklistGroups.map(group => group.id)).size !== checklistGroups.length ||
-    checklistItems.some(item => !item || typeof item.id !== "string" || !item.id || typeof item.title !== "string" || !item.title.trim() || typeof item.notes !== "string" || typeof item.completed !== "boolean" || typeof item.groupId !== "string" || (item.groupId !== "" && !checklistGroups.some(group => group.id === item.groupId)) || typeof item.createdAt !== "string" || typeof item.updatedAt !== "string") ||
+    checklistItems.some(item => !item || typeof item.id !== "string" || !item.id || typeof item.title !== "string" || !item.title.trim() || typeof item.notes !== "string" || typeof item.completed !== "boolean" || typeof item.groupId !== "string" || (item.groupId !== "" && !checklistGroups.some(group => group.id === item.groupId)) || typeof item.createdAt !== "string" || typeof item.updatedAt !== "string" || (item.schedule != null && !isValidSchedule(item.schedule))) ||
     new Set(checklistItems.map(item => item.id)).size !== checklistItems.length) {
     throw new Error("Invalid checklist data");
+  }
+
+  const checklistOccurrences = payload.checklistOccurrences ?? [];
+  if (!Array.isArray(checklistOccurrences) || checklistOccurrences.some(state =>
+    !state || typeof state.itemId !== "string" || !checklistItems.some(item => item.id === state.itemId) ||
+    !isISODate(state.date) || typeof state.completed !== "boolean" || typeof state.updatedAt !== "string"
+  ) || new Set(checklistOccurrences.map(state => JSON.stringify([state.itemId, state.date]))).size !== checklistOccurrences.length) {
+    throw new Error("Invalid checklist occurrence data");
   }
 
   const monthlyReflections = payload.monthlyReflections ?? [];
@@ -511,5 +543,6 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     await db.stockImages.bulkPut(stockData.images);
     await db.checklistGroups.bulkPut(checklistGroups);
     await db.checklistItems.bulkPut(checklistItems);
+    await db.checklistOccurrences.bulkPut(checklistOccurrences);
   });
 };

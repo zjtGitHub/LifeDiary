@@ -1,3 +1,4 @@
+import { isValidSchedule } from "./schedules";
 import { db } from "./db";
 import type { ChecklistGroup, ChecklistItem } from "../types";
 
@@ -40,12 +41,23 @@ export const createChecklistItem = async (groupId: string, title: string): Promi
   });
 };
 
-export const updateChecklistItem = async (id: string, changes: Partial<Pick<ChecklistItem, "title" | "notes" | "completed" | "groupId">>) => {
+export const updateChecklistItem = async (id: string, changes: Partial<Pick<ChecklistItem, "title" | "notes" | "completed" | "groupId" | "schedule">>) => {
   if (changes.title !== undefined && !changes.title.trim()) throw new Error("请输入任务名称");
-  await db.transaction("rw", db.checklistGroups, db.checklistItems, async () => {
+  if (changes.schedule != null && !isValidSchedule(changes.schedule)) throw new Error("请检查日期、时间段和重复设置");
+  await db.transaction("rw", db.checklistGroups, db.checklistItems, db.checklistOccurrences, async () => {
     if (changes.groupId && !await db.checklistGroups.get(changes.groupId)) throw new Error("分组不存在");
+    const current = await db.checklistItems.get(id);
+    if (!current) throw new Error("任务不存在");
+    if (changes.schedule !== undefined && changes.schedule?.repeat !== current.schedule?.repeat) {
+      await db.checklistOccurrences.where("itemId").equals(id).delete();
+    }
     await db.checklistItems.update(id, { ...changes, ...(changes.title !== undefined ? { title: changes.title.trim() } : {}), updatedAt: new Date().toISOString() });
   });
 };
 
-export const deleteChecklistItem = async (id: string) => { await db.checklistItems.delete(id); };
+export const deleteChecklistItem = async (id: string) => {
+  await db.transaction("rw", db.checklistItems, db.checklistOccurrences, async () => {
+    await db.checklistOccurrences.where("itemId").equals(id).delete();
+    await db.checklistItems.delete(id);
+  });
+};

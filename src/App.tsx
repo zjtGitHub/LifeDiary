@@ -1,4 +1,4 @@
-import { BookOpen, ChartNoAxesCombined, HardDrive, ListChecks, NotebookPen, ScrollText } from "lucide-react";
+import { CalendarDays, BookOpen, ChartNoAxesCombined, HardDrive, ListChecks, NotebookPen, ScrollText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DataBackup } from "./components/DataBackup";
 import { StockWorkspace } from "./components/stocks/StockWorkspace";
@@ -28,7 +28,7 @@ import {
   searchEntries,
   setTodoCompleted
 } from "./lib/db";
-import { isoDate, parseISODate } from "./lib/date";
+import { buildMonthGrid, isoDate, parseISODate } from "./lib/date";
 import type { CalendarDayStatus, DayEntry, ISODate, Profile, SearchResult, TodoItem, WeekSummary } from "./types";
 
 interface DiaryPageProps {
@@ -68,7 +68,8 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
   };
 
   const refreshOverview = async () => {
-    const [nextStatuses, nextTags] = await Promise.all([listCalendarStatuses(), listAllTags()]);
+    const days = buildMonthGrid(month);
+    const [nextStatuses, nextTags] = await Promise.all([listCalendarStatuses(days[0].iso, days[days.length - 1].iso), listAllTags()]);
     setCalendarStatuses(nextStatuses);
     setAllTags(nextTags);
     setOverviewVersion((version) => version + 1);
@@ -81,7 +82,9 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
     };
     window.addEventListener("diary-data-changed", handleCalendarDataChange);
     return () => window.removeEventListener("diary-data-changed", handleCalendarDataChange);
-  }, [selectedDate]);
+  }, [selectedDate, month]);
+
+  useEffect(() => { void refreshOverview(); }, [month]);
 
   useEffect(() => {
     let alive = true;
@@ -94,7 +97,6 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
     };
 
     loadProfile();
-    refreshOverview();
 
     return () => {
       alive = false;
@@ -332,6 +334,7 @@ function App() {
       <AppLink href="/" className="app-brand" aria-label="时光日记首页"><span className="app-brand-mark"><BookOpen size={21} aria-hidden="true" /></span><span className="app-brand-name">时光日记<small>留住每一次成长</small></span></AppLink>
       <div className="app-nav-links">
         <AppLink href="/" aria-current={path === "/" ? "page" : undefined}><NotebookPen size={16} aria-hidden="true" />日记</AppLink>
+        <AppLink href="/calendar" aria-current={isCalendarRoute ? "page" : undefined}><CalendarDays size={16} aria-hidden="true" />日历</AppLink>
         <AppLink href="/list" aria-current={isTaskListRoute ? "page" : undefined}><ListChecks size={16} aria-hidden="true" />清单</AppLink>
         <AppLink href="/stocks" aria-current={stockRoute ? "page" : undefined}><ChartNoAxesCombined size={16} aria-hidden="true" />股票备忘录</AppLink>
       </div>
