@@ -18,6 +18,8 @@ import {
   saveBirthDate,
   saveDayTags,
   saveDayText,
+  saveDayWeight,
+  saveDayHealth,
   saveMonthlyReflection,
   searchEntries,
   setTodoCompleted
@@ -39,6 +41,88 @@ describe("IndexedDB data layer", () => {
 
     await deleteImageFromDay("2026-05-05", entryWithImage.images[0].id);
     expect((await getDayEntry("2026-05-05")).images).toHaveLength(0);
+  });
+
+  it("saves daily weights independently, preserves them during concurrent diary edits, and clears just the weight", async () => {
+    await Promise.all([
+      saveDayWeight("2026-05-05", 65.25),
+      saveDayText("2026-05-05", "一起保存的正文"),
+      saveDayTags("2026-05-05", ["运动"])
+    ]);
+    await saveDayWeight("2026-05-06", 65.1);
+    db.close(); await db.open();
+    expect(await getDayEntry("2026-05-05")).toMatchObject({ weightKg: 65.25, text: "一起保存的正文", tags: ["运动"] });
+    expect((await getDayEntry("2026-05-06")).weightKg).toBe(65.1);
+    await saveDayWeight("2026-05-05");
+    expect(await getDayEntry("2026-05-05")).toMatchObject({ text: "一起保存的正文", tags: ["运动"] });
+    expect((await getDayEntry("2026-05-05")).weightKg).toBeUndefined();
+    expect((await getDayEntry("2026-05-06")).weightKg).toBe(65.1);
+  });
+
+  it("includes weight-only dates in calendars, searches and monthly history", async () => {
+    await saveDayWeight("2026-05-05", 65.25);
+    expect((await listCalendarStatuses())["2026-05-05"].hasDiary).toBe(true);
+    expect((await searchEntries("2026-05-05"))[0]).toMatchObject({ date: "2026-05-05", weightKg: 65.25 });
+    expect((await getYearMonthSummaries(2026))[4].recordedDates).toEqual(["2026-05-05"]);
+  });
+
+  it("saves both health fields atomically with diary edits and tracks calorie-only dates including zero and surplus", async () => {
+    await Promise.all([
+      saveDayHealth("2026-05-05", { weightKg: 65.25, calorieDeficitKcal: 500 }),
+      saveDayText("2026-05-05", "一起保存的正文")
+    ]);
+    await saveDayHealth("2026-05-06", { calorieDeficitKcal: 0 });
+    await saveDayHealth("2026-05-07", { calorieDeficitKcal: -150 });
+    db.close(); await db.open();
+    expect(await getDayEntry("2026-05-05")).toMatchObject({ weightKg: 65.25, calorieDeficitKcal: 500, text: "一起保存的正文" });
+    expect((await listCalendarStatuses())["2026-05-06"]).toMatchObject({ hasDiary: true, calorieDeficitKcal: 0 });
+    expect((await searchEntries("2026-05-07"))[0].calorieDeficitKcal).toBe(-150);
+    expect((await getYearMonthSummaries(2026))[4].recordedDates).toEqual(["2026-05-05", "2026-05-06", "2026-05-07"]);
+    await saveDayHealth("2026-05-05", { weightKg: 65.25 });
+    expect((await getDayEntry("2026-05-05")).calorieDeficitKcal).toBeUndefined();
+    await saveDayHealth("2026-05-05", {});
+    expect(await getDayEntry("2026-05-05")).toMatchObject({ text: "一起保存的正文" });
+    expect((await getDayEntry("2026-05-05")).weightKg).toBeUndefined();
+    expect((await getDayEntry("2026-05-07")).calorieDeficitKcal).toBe(-150);
+  });
+
+  it("round trips all health values in backups and rejects invalid calorie data before any overwrite", async () => {
+    await saveDayHealth("2026-05-05", { weightKg: 65.25, calorieDeficitKcal: 500 });
+    await saveDayHealth("2026-05-06", { calorieDeficitKcal: 0 });
+    await saveDayHealth("2026-05-07", { calorieDeficitKcal: -150.5 });
+    const payload = await createBackupPayload();
+    await restoreBackupPayload(payload);
+    expect(await getDayEntry("2026-05-05")).toMatchObject({ weightKg: 65.25, calorieDeficitKcal: 500 });
+    expect((await getDayEntry("2026-05-06")).calorieDeficitKcal).toBe(0);
+    expect((await getDayEntry("2026-05-07")).calorieDeficitKcal).toBe(-150.5);
+    for (const invalid of [NaN, Infinity, "500", null]) {
+      await expect(saveDayHealth("2026-05-05", { calorieDeficitKcal: invalid as number })).rejects.toThrow();
+      const bad = structuredClone(payload);
+      bad.dayEntries[0].calorieDeficitKcal = invalid as number;
+      await expect(restoreBackupPayload(bad)).rejects.toThrow("Invalid diary calorie deficit data");
+      expect(await getDayEntry("2026-05-05")).toMatchObject({ weightKg: 65.25, calorieDeficitKcal: 500 });
+    }
+  });
+
+  it("round trips weights in backups, accepts legacy entries and rejects invalid weights before changing any data", async () => {
+    await saveDayText("2026-05-05", "保留正文");
+    await saveDayWeight("2026-05-05", 65.25);
+    const payload = await createBackupPayload();
+    expect(payload.dayEntries[0].weightKg).toBe(65.25);
+    await saveDayWeight("2026-05-05", 70);
+    await restoreBackupPayload(payload);
+    expect((await getDayEntry("2026-05-05")).weightKg).toBe(65.25);
+    for (const invalid of [0, -1, NaN, Infinity, "65", null]) {
+      await expect(saveDayWeight("2026-05-05", invalid as number)).rejects.toThrow();
+      const bad = structuredClone(payload);
+      bad.dayEntries[0].weightKg = invalid as number;
+      await expect(restoreBackupPayload(bad)).rejects.toThrow("Invalid diary weight data");
+      expect(await getDayEntry("2026-05-05")).toMatchObject({ weightKg: 65.25, text: "保留正文" });
+    }
+    delete payload.dayEntries[0].weightKg;
+    await restoreBackupPayload(payload);
+    expect((await getDayEntry("2026-05-05")).weightKg).toBeUndefined();
+    expect((await getDayEntry("2026-05-05")).text).toBe("保留正文");
   });
 
   it("manages todos by date", async () => {

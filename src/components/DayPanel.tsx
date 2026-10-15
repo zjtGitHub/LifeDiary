@@ -1,8 +1,9 @@
 import { ImagePlus, Plus, Tag, Trash2, X } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import type { DayEntry, DiaryImage } from "../types";
+import type { DayEntry, DayHealth, DiaryImage } from "../types";
 import { displayDate } from "../lib/date";
 import { TodoList } from "./TodoList";
+import { HealthPanel } from "./HealthPanel";
 import type { TodoItem } from "../types";
 
 interface DayPanelProps {
@@ -11,6 +12,8 @@ interface DayPanelProps {
   text: string;
   todos: TodoItem[];
   saveStatus: string;
+  loading: boolean;
+  onHealthChange: (health: DayHealth) => Promise<void>;
   onTextChange: (value: string) => void;
   onTagsChange: (tags: string[]) => Promise<void>;
   onAddImages: (files: File[]) => Promise<void>;
@@ -52,6 +55,8 @@ export function DayPanel({
   text,
   todos,
   saveStatus,
+  loading,
+  onHealthChange,
   onTextChange,
   onTagsChange,
   onAddImages,
@@ -157,6 +162,7 @@ export function DayPanel({
         </div>
       </section>
 
+      <HealthPanel key={date} health={entry.date === date ? entry : {}} loading={loading || entry.date !== date} onSave={onHealthChange} />
       <TodoList todos={todos} onAdd={onAddTodo} onToggle={onToggleTodo} onDelete={onDeleteTodo} />
     </div>
   );

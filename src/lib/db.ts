@@ -8,6 +8,7 @@ import type {
   ChecklistItem,
   ChecklistOccurrence,
   DayEntry,
+  DayHealth,
   DiaryImage,
   ISODate,
   MonthlyReflection,
@@ -117,30 +118,46 @@ export const getDayEntry = async (date: ISODate): Promise<DayEntry> => {
   return entry ? normalizeDayEntry(entry) : emptyDayEntry(date);
 };
 
-export const saveDayText = async (date: ISODate, text: string): Promise<DayEntry> => {
+const updateDayEntry = (date: ISODate, update: (entry: DayEntry) => DayEntry): Promise<DayEntry> => db.transaction("rw", db.dayEntries, async () => {
   const current = await getDayEntry(date);
-  const entry: DayEntry = {
-    ...current,
-    text,
-    updatedAt: now()
-  };
+  const entry = { ...update(current), updatedAt: now() };
   await db.dayEntries.put(entry);
   return entry;
+});
+
+const isValidWeight = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+const isValidCalorieDeficit = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+export const saveDayHealth = async (date: ISODate, health: DayHealth): Promise<DayEntry> => {
+  if (!isISODate(date) || (health.weightKg !== undefined && !isValidWeight(health.weightKg)) ||
+    (health.calorieDeficitKcal !== undefined && !isValidCalorieDeficit(health.calorieDeficitKcal))) {
+    throw new Error("请检查体重和卡路里缺口，体重需大于 0，卡路里缺口需为有效数字");
+  }
+  return updateDayEntry(date, current => {
+    const entry = { ...current };
+    if (health.weightKg === undefined) delete entry.weightKg;
+    else entry.weightKg = health.weightKg;
+    if (health.calorieDeficitKcal === undefined) delete entry.calorieDeficitKcal;
+    else entry.calorieDeficitKcal = health.calorieDeficitKcal;
+    return entry;
+  });
 };
 
-export const saveDayTags = async (date: ISODate, tags: string[]): Promise<DayEntry> => {
-  const current = await getDayEntry(date);
-  const entry: DayEntry = {
-    ...current,
-    tags: normalizeTags(tags),
-    updatedAt: now()
-  };
-  await db.dayEntries.put(entry);
-  return entry;
+export const saveDayWeight = async (date: ISODate, weightKg?: number): Promise<DayEntry> => {
+  if (!isISODate(date) || (weightKg !== undefined && !isValidWeight(weightKg))) throw new Error("请输入大于 0 的有效体重");
+  return updateDayEntry(date, current => {
+    const entry = { ...current };
+    if (weightKg === undefined) delete entry.weightKg;
+    else entry.weightKg = weightKg;
+    return entry;
+  });
 };
+
+export const saveDayText = (date: ISODate, text: string): Promise<DayEntry> => updateDayEntry(date, current => ({ ...current, text }));
+
+export const saveDayTags = (date: ISODate, tags: string[]): Promise<DayEntry> => updateDayEntry(date, current => ({ ...current, tags: normalizeTags(tags) }));
 
 export const addImagesToDay = async (date: ISODate, files: File[]): Promise<DayEntry> => {
-  const current = await getDayEntry(date);
   const createdAt = now();
   const images: DiaryImage[] = files.map((file) => ({
     id: createId(),
@@ -149,25 +166,10 @@ export const addImagesToDay = async (date: ISODate, files: File[]): Promise<DayE
     blob: file,
     createdAt
   }));
-  const entry: DayEntry = {
-    ...current,
-    images: [...current.images, ...images],
-    updatedAt: now()
-  };
-  await db.dayEntries.put(entry);
-  return entry;
+  return updateDayEntry(date, current => ({ ...current, images: [...current.images, ...images] }));
 };
 
-export const deleteImageFromDay = async (date: ISODate, imageId: string): Promise<DayEntry> => {
-  const current = await getDayEntry(date);
-  const entry: DayEntry = {
-    ...current,
-    images: current.images.filter((image) => image.id !== imageId),
-    updatedAt: now()
-  };
-  await db.dayEntries.put(entry);
-  return entry;
-};
+export const deleteImageFromDay = (date: ISODate, imageId: string): Promise<DayEntry> => updateDayEntry(date, current => ({ ...current, images: current.images.filter(image => image.id !== imageId) }));
 
 export const listTodosByDate = async (date: ISODate): Promise<TodoItem[]> => {
   const data = await getCalendarMonthData(date, date);
@@ -252,7 +254,9 @@ export const listCalendarStatuses = async (startDate = format(new Date(), "yyyy-
 
   entries.map(normalizeDayEntry).forEach((entry) => {
     const status = ensureStatus(entry.date);
-    status.hasDiary = entry.text.trim().length > 0 || entry.tags.length > 0;
+    status.hasDiary = entry.text.trim().length > 0 || entry.tags.length > 0 || entry.weightKg !== undefined || entry.calorieDeficitKcal !== undefined;
+    status.weightKg = entry.weightKg;
+    status.calorieDeficitKcal = entry.calorieDeficitKcal;
     status.hasImages = entry.images.length > 0;
     status.tags = entry.tags;
   });
@@ -291,7 +295,7 @@ export const searchEntries = async (query: string): Promise<SearchResult[]> => {
 
   return entries
     .map(normalizeDayEntry)
-    .filter((entry) => entry.text.trim() || entry.tags.length > 0 || entry.images.length > 0)
+    .filter((entry) => entry.text.trim() || entry.tags.length > 0 || entry.images.length > 0 || entry.weightKg !== undefined || entry.calorieDeficitKcal !== undefined)
     .filter((entry) => {
       if (!normalizedQuery) {
         return true;
@@ -315,6 +319,8 @@ export const searchEntries = async (query: string): Promise<SearchResult[]> => {
       return {
         date: entry.date,
         text: entry.text,
+        weightKg: entry.weightKg,
+        calorieDeficitKcal: entry.calorieDeficitKcal,
         tags: entry.tags,
         imageCount: entry.images.length,
         todoCount: counts.total,
@@ -381,7 +387,7 @@ export const getYearMonthSummaries = async (year: number): Promise<MonthSummary[
       completedTodoCount: monthTodos.filter((todo) => todo.completed).length,
       tags: Array.from(new Set(monthEntries.flatMap((entry) => entry.tags))),
       recordedDates: Array.from(new Set([
-        ...monthEntries.filter((entry) => entry.text.trim() || entry.tags.length || entry.images.length).map((entry) => entry.date),
+        ...monthEntries.filter((entry) => entry.text.trim() || entry.tags.length || entry.images.length || entry.weightKg !== undefined || entry.calorieDeficitKcal !== undefined).map((entry) => entry.date),
         ...monthTodos.map((todo) => todo.date)
       ])).sort()
     };
@@ -396,7 +402,7 @@ interface BackupImage {
   createdAt: string;
 }
 
-interface BackupDayEntry {
+interface BackupDayEntry extends DayHealth {
   date: ISODate;
   text: string;
   tags: string[];
@@ -455,6 +461,8 @@ export const createBackupPayload = async (): Promise<BackupPayload> => {
       return {
         date: entry.date,
         text: entry.text,
+        ...(entry.weightKg !== undefined ? { weightKg: entry.weightKg } : {}),
+        ...(entry.calorieDeficitKcal !== undefined ? { calorieDeficitKcal: entry.calorieDeficitKcal } : {}),
         tags: entry.tags,
         images,
         updatedAt: entry.updatedAt
@@ -507,9 +515,18 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     throw new Error("Invalid monthly reflections");
   }
 
+  if (!Array.isArray(payload.dayEntries) || payload.dayEntries.some(entry => !entry || (entry.weightKg !== undefined && !isValidWeight(entry.weightKg)))) {
+    throw new Error("Invalid diary weight data");
+  }
+  if (payload.dayEntries.some(entry => entry.calorieDeficitKcal !== undefined && !isValidCalorieDeficit(entry.calorieDeficitKcal))) {
+    throw new Error("Invalid diary calorie deficit data");
+  }
+
   const dayEntries = await Promise.all(
     payload.dayEntries.map(async (entry) => ({
       date: entry.date,
+      ...(entry.weightKg !== undefined ? { weightKg: entry.weightKg } : {}),
+      ...(entry.calorieDeficitKcal !== undefined ? { calorieDeficitKcal: entry.calorieDeficitKcal } : {}),
       text: entry.text ?? "",
       tags: normalizeTags(entry.tags ?? []),
       images: await Promise.all(

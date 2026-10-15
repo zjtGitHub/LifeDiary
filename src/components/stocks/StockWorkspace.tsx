@@ -4,7 +4,6 @@ import { db } from "../../lib/db";
 import { AppLink, navigate } from "../../lib/router";
 import { addStock, displayTimestamp } from "../../lib/stocks";
 import type { Stock, StockNote } from "../../types";
-import { DataBackup } from "../DataBackup";
 import { StockDetail } from "./StockDetail";
 
 export function StockWorkspace({ stockId }: { stockId?: string }) {
@@ -68,7 +67,6 @@ export function StockWorkspace({ stockId }: { stockId?: string }) {
             </AppLink>;
           })}</div> : <div className="stock-list-empty"><p>{query ? "没有找到股票" : archived ? "还没有归档的股票" : "还没有关注的股票"}</p>{!archived && !query ? <button className="stock-text-button" type="button" onClick={() => setAdding(true)}>添加第一只股票</button> : null}</div>}
         </section>
-        <DataBackup />
       </aside>
       {selected ? <StockDetail key={stockId} stock={selected} version={version} onChanged={refresh} /> : <section className="panel stock-empty stock-select-empty"><span className="stock-empty-mark" aria-hidden="true"><BookOpenText size={32} strokeWidth={1.3} /></span><h2>{stockId && loaded ? "这只股票不存在" : "每只股票，一段认识的历程"}</h2><p>{stockId && loaded ? "股票可能尚未恢复到当前浏览器，请检查备份或返回列表。" : "从左侧选择一只股票，按时间查看想法、图片和关键节点。"}</p>{stockId ? <AppLink href="/stocks">返回股票列表</AppLink> : null}</section>}
     </div>

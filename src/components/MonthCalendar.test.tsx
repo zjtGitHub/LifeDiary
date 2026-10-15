@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MonthCalendar } from "./MonthCalendar";
-import { addTodo, db, saveDayText } from "../lib/db";
+import { addTodo, db, saveDayText, saveDayHealth } from "../lib/db";
 import { parseISODate } from "../lib/date";
 import type { ISODate } from "../types";
 
@@ -78,5 +78,28 @@ describe("calendar views", () => {
     expect(screen.getByRole("combobox", { name: "日历维度" })).toHaveValue("day");
     expect(screen.getByRole("heading", { name: "2026年5月6日" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "完成计划：任务5" })).toBeInTheDocument();
+  });
+
+  it("shows health separately from diary and plans across all calendar views, including zero and negative deficits", async () => {
+    await saveDayText("2026-05-05", "正文仍然显示");
+    await saveDayHealth("2026-05-05", { weightKg: 65.25, calorieDeficitKcal: 500 });
+    await addTodo("2026-05-05", "当天计划");
+    await saveDayHealth("2026-05-06", { calorieDeficitKcal: 0 });
+    await saveDayHealth("2026-05-07", { calorieDeficitKcal: -150 });
+    render(<CalendarHarness />);
+    await screen.findByTitle("缺口 500 大卡");
+    for (const view of ["month", "week", "day"] as const) {
+      changeView(view);
+      const day = within(await screen.findByRole("gridcell", { name: "2026年5月5日，1项计划，有日记，有健康记录" }));
+      expect(day.getByTitle("体重 130.5 斤")).toHaveTextContent("130.5斤");
+      expect(day.getByTitle("缺口 500 大卡")).toHaveTextContent("500大卡");
+      expect(day.getByText("正文仍然显示")).toBeInTheDocument();
+      expect(day.getByRole("button", { name: "完成计划：当天计划" })).toBeInTheDocument();
+    }
+    changeView("month");
+    const zero = within(await screen.findByRole("gridcell", { name: "2026年5月6日，0项计划，有健康记录" }));
+    expect(zero.getByTitle("缺口 0 大卡")).toHaveTextContent("0大卡");
+    expect(zero.queryByText(/斤/)).not.toBeInTheDocument();
+    expect(screen.getByTitle("缺口 -150 大卡")).toHaveTextContent("-150大卡");
   });
 });

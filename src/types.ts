@@ -8,7 +8,12 @@ export interface DiaryImage {
   createdAt: string;
 }
 
-export interface DayEntry {
+export interface DayHealth {
+  weightKg?: number;
+  calorieDeficitKcal?: number;
+}
+
+export interface DayEntry extends DayHealth {
   date: ISODate;
   text: string;
   tags: string[];
@@ -32,7 +37,9 @@ export interface ChecklistSchedule {
   date: ISODate;
   time?: string;
   endTime?: string;
-  repeat: "none" | "daily" | "weekly" | "monthly";
+  repeat: "none" | "daily" | "workdays" | "weekends" | "weekly" | "biweekly" | "monthly" | "quarterly" | "semiannual" | "yearly" | "ebbinghaus" | "custom";
+  interval?: number;
+  unit?: "day" | "week" | "month" | "year";
   weekdays?: number[];
   until?: ISODate;
 }
@@ -67,7 +74,7 @@ export interface Profile {
   birthDate?: ISODate;
 }
 
-export interface CalendarDayStatus {
+export interface CalendarDayStatus extends DayHealth {
   hasDiary: boolean;
   hasImages: boolean;
   todoCount: number;
@@ -75,7 +82,7 @@ export interface CalendarDayStatus {
   tags: string[];
 }
 
-export interface SearchResult {
+export interface SearchResult extends DayHealth {
   date: ISODate;
   text: string;
   tags: string[];

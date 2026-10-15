@@ -1,6 +1,6 @@
 import { CalendarDays, BookOpen, ChartNoAxesCombined, HardDrive, ListChecks, NotebookPen, Sprout, ScrollText } from "lucide-react";
 import { useEffect, useState } from "react";
-import { DataBackup } from "./components/DataBackup";
+import { BackupMenu } from "./components/BackupMenu";
 import { StockWorkspace } from "./components/stocks/StockWorkspace";
 import { AppLink, navigate, usePathname } from "./lib/router";
 import { Calendar } from "./components/Calendar";
@@ -22,11 +22,12 @@ import {
   listTodosByDate,
   saveDayTags,
   saveDayText,
+  saveDayHealth,
   searchEntries,
   setTodoCompleted
 } from "./lib/db";
 import { buildMonthGrid, isoDate, parseISODate } from "./lib/date";
-import type { CalendarDayStatus, DayEntry, ISODate, SearchResult, TodoItem } from "./types";
+import type { CalendarDayStatus, DayEntry, DayHealth, ISODate, SearchResult, TodoItem } from "./types";
 
 interface DiaryPageProps {
   active: boolean;
@@ -147,6 +148,12 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
     await refreshOverview();
   };
 
+  const handleHealthChange = async (health: DayHealth) => {
+    const saved = await saveDayHealth(selectedDate, health);
+    setEntry(current => current.date === saved.date ? saved : current);
+    await refreshOverview();
+  };
+
   const handleAddImages = async (files: File[]) => {
     const nextEntry = await addImagesToDay(selectedDate, files);
     setEntry(nextEntry);
@@ -211,6 +218,8 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
           text={text}
           todos={todos}
           saveStatus={saveStatus}
+          loading={isLoadingDay}
+          onHealthChange={handleHealthChange}
           onTextChange={setText}
           onTagsChange={handleTagsChange}
           onAddImages={handleAddImages}
@@ -220,7 +229,7 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
           onDeleteTodo={handleDeleteTodo}
         />
 
-        <aside className="diary-tools" aria-label="查找与备份">
+        <aside className="diary-tools" aria-label="查找日记">
           <SearchPanel
             query={searchQuery}
             results={searchResults}
@@ -228,7 +237,6 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
             onQueryChange={setSearchQuery}
             onSelectDate={handleSelectDate}
           />
-          <DataBackup />
         </aside>
       </div>
       {isMonthTimelineOpen && active ? <MonthTimeline initialYear={Number(selectedDate.slice(0, 4))}
@@ -258,7 +266,7 @@ function App() {
     setMonth(parseISODate(date));
   };
   return <>
-    <nav className="app-navigation" aria-label="主导航">
+    <header className="app-navigation-shell"><nav className="app-navigation" aria-label="主导航">
       <AppLink href="/" className="app-brand" aria-label="时光日记首页"><span className="app-brand-mark"><BookOpen size={21} aria-hidden="true" /></span><span className="app-brand-name">时光日记<small>留住每一次成长</small></span></AppLink>
       <div className="app-nav-links">
         <AppLink href="/" aria-current={path === "/" ? "page" : undefined}><NotebookPen size={16} aria-hidden="true" />日记</AppLink>
@@ -267,8 +275,8 @@ function App() {
         <AppLink href="/life" aria-current={isLifeRoute ? "page" : undefined}><Sprout size={16} aria-hidden="true" />人生</AppLink>
         <AppLink href="/stocks" aria-current={stockRoute ? "page" : undefined}><ChartNoAxesCombined size={16} aria-hidden="true" />股票备忘录</AppLink>
       </div>
-      <span className="app-storage-note"><HardDrive size={14} aria-hidden="true" />本地保存<span className="storage-status-dot" aria-hidden="true" /></span>
-    </nav>
+      <div className="app-nav-tools"><span className="app-storage-note"><HardDrive size={14} aria-hidden="true" />本地保存<span className="storage-status-dot" aria-hidden="true" /></span><BackupMenu /></div>
+    </nav></header>
     {restoreNotice ? <p className="app-restore-notice" role="status">全部数据已恢复。<button type="button" className="stock-text-button" onClick={() => setRestoreNotice(false)}>关闭提示</button></p> : null}
     <div hidden={path !== "/"}><DiaryPage key={dataVersion} active={path === "/"} selectedDate={selectedDate} setSelectedDate={setSelectedDate} month={month} setMonth={setMonth} /></div>
     {isTaskListRoute ? <TaskList key={dataVersion} /> : null}

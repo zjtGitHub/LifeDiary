@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { buildMonthGrid, displayMonth, nextMonth, previousMonth } from "../lib/date";
 import type { CalendarDayStatus, ISODate } from "../types";
 import { AppLink } from "../lib/router";
+import { healthLabels } from "../lib/health";
 
 interface CalendarProps {
   month: Date;
@@ -17,6 +18,7 @@ const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
 export function Calendar({ month, selectedDate, statuses, onMonthChange, onSelectDate }: CalendarProps) {
   const today = useMemo(() => new Date(), []);
   const days = useMemo(() => buildMonthGrid(month, today), [month, today]);
+  const selectedHealth = healthLabels(statuses[selectedDate] ?? {});
 
   return (
     <section className="panel calendar-panel" aria-label="月历">
@@ -96,6 +98,7 @@ export function Calendar({ month, selectedDate, statuses, onMonthChange, onSelec
           );
         })}
       </div>
+      {selectedHealth.length ? <div className="calendar-selected-health" aria-label="所选日期健康记录"><span>当天健康</span>{selectedHealth.map(label => <strong key={label}>{label}</strong>)}</div> : null}
     </section>
   );
 }

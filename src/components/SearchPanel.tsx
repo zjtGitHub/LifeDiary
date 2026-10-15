@@ -1,5 +1,6 @@
 import { Image, Search, Tag } from "lucide-react";
 import type { SearchResult } from "../types";
+import { healthLabels } from "../lib/health";
 
 interface SearchPanelProps {
   query: string;
@@ -56,7 +57,7 @@ export function SearchPanel({ query, results, tags, onQueryChange, onSelectDate 
           results.map((result) => (
             <button className="search-result" key={result.date} type="button" onClick={() => onSelectDate(result.date)}>
               <span className="search-date">{result.date}</span>
-              <span>{previewText(result.text)}</span>
+              <span>{result.text.trim() ? previewText(result.text) : healthLabels(result).join(" · ") || previewText(result.text)}</span>
               <small>
                 {result.tags.map((tag) => `#${tag}`).join(" ")}
                 {result.imageCount > 0 ? (

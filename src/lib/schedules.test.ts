@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createChecklistGroup, createChecklistItem, deleteChecklistGroup, deleteChecklistItem, updateChecklistItem } from "./checklists";
 import { createBackupPayload, db, getCalendarMonthData, getWeekSummary, getYearMonthSummaries, listCalendarStatuses, listTodosByDate, restoreBackupPayload, setTodoCompleted } from "./db";
-import { isValidSchedule, occursOn } from "./schedules";
+import { isValidSchedule, occursOn, scheduleLabel } from "./schedules";
 import type { ChecklistSchedule } from "../types";
 
 beforeEach(async () => { await db.delete(); await db.open(); });
@@ -44,6 +44,81 @@ describe("scheduled checklists", () => {
     const schedule: ChecklistSchedule = { date: "2023-12-31", repeat: "monthly" };
     for (const date of ["2023-12-31", "2024-01-31", "2024-02-29", "2024-04-30", "2025-02-28"]) expect(occursOn(schedule, date)).toBe(true);
     for (const date of ["2023-11-30", "2024-02-28", "2024-03-30", "2024-05-30"]) expect(occursOn(schedule, date)).toBe(false);
+  });
+
+  it("schedules weekdays and weekends from the start date through an inclusive end date", () => {
+    const workdays: ChecklistSchedule = { date: "2026-10-16", repeat: "workdays", until: "2026-10-19" };
+    for (const date of ["2026-10-16", "2026-10-19"]) expect(occursOn(workdays, date)).toBe(true);
+    for (const date of ["2026-10-15", "2026-10-17", "2026-10-18", "2026-10-20"]) expect(occursOn(workdays, date)).toBe(false);
+    const weekends: ChecklistSchedule = { ...workdays, repeat: "weekends" };
+    for (const date of ["2026-10-17", "2026-10-18"]) expect(occursOn(weekends, date)).toBe(true);
+    for (const date of ["2026-10-16", "2026-10-19", "2026-10-24"]) expect(occursOn(weekends, date)).toBe(false);
+  });
+
+  it.each([
+    ["quarterly", ["2026-01-31", "2026-04-30", "2026-07-31", "2026-10-31", "2027-01-31"], ["2026-02-28", "2026-04-29", "2026-05-31"]],
+    ["semiannual", ["2026-01-31", "2026-07-31", "2027-01-31"], ["2026-04-30", "2026-10-31"]]
+  ] as const)("anchors %s to the original month and day without month-end drift", (repeat, included, excluded) => {
+    const schedule: ChecklistSchedule = { date: "2026-01-31", repeat };
+    for (const date of included) expect(occursOn(schedule, date)).toBe(true);
+    for (const date of excluded) expect(occursOn(schedule, date)).toBe(false);
+  });
+
+  it("returns to February 29 in leap years for annual schedules", () => {
+    const schedule: ChecklistSchedule = { date: "2024-02-29", repeat: "yearly" };
+    for (const date of ["2024-02-29", "2025-02-28", "2026-02-28", "2028-02-29"]) expect(occursOn(schedule, date)).toBe(true);
+    for (const date of ["2024-03-29", "2025-03-01", "2028-02-28"]) expect(occursOn(schedule, date)).toBe(false);
+  });
+
+  it.each(["biweekly", "custom"] as const)("anchors %s weeks to Monday even when learning starts midweek across years", repeat => {
+    const schedule: ChecklistSchedule = { date: "2026-12-30", repeat, weekdays: [1, 3, 0], ...(repeat === "custom" ? { interval: 2, unit: "week" as const } : {}) };
+    for (const date of ["2026-12-30", "2027-01-03", "2027-01-11", "2027-01-13", "2027-01-17"]) expect(occursOn(schedule, date)).toBe(true);
+    for (const date of ["2026-12-28", "2027-01-04", "2027-01-06", "2027-01-10", "2027-01-12"]) expect(occursOn(schedule, date)).toBe(false);
+  });
+
+  it("supports custom calendar-day, month and year intervals", () => {
+    const daily: ChecklistSchedule = { date: "2026-03-07", repeat: "custom", interval: 2, unit: "day" };
+    expect(occursOn(daily, "2026-03-09")).toBe(true);
+    expect(occursOn(daily, "2026-03-08")).toBe(false);
+    const monthly: ChecklistSchedule = { date: "2025-12-31", repeat: "custom", interval: 2, unit: "month" };
+    for (const date of ["2026-02-28", "2026-04-30", "2026-08-31"]) expect(occursOn(monthly, date)).toBe(true);
+    expect(occursOn(monthly, "2026-03-31")).toBe(false);
+    const yearly: ChecklistSchedule = { date: "2024-02-29", repeat: "custom", interval: 2, unit: "year" };
+    expect(occursOn(yearly, "2026-02-28")).toBe(true);
+    expect(occursOn(yearly, "2028-02-29")).toBe(true);
+    expect(occursOn(yearly, "2025-02-28")).toBe(false);
+  });
+
+  it("generates a finite learning and review sequence with independent completion and backup support", async () => {
+    const item = await scheduledItem("复习单词", { date: "2026-10-15", repeat: "ebbinghaus" });
+    const dates = ["2026-10-15", "2026-10-16", "2026-10-17", "2026-10-19", "2026-10-22", "2026-10-30", "2026-11-14"];
+    const data = await getCalendarMonthData("2026-10-14", "2026-12-31");
+    expect(Object.keys(data.todos)).toEqual(dates);
+    await setTodoCompleted(data.todos["2026-10-16"][0].id, true);
+    expect((await listTodosByDate("2026-10-17"))[0].completed).toBe(false);
+    await restoreBackupPayload(await createBackupPayload());
+    expect((await listTodosByDate("2026-10-16"))[0].completed).toBe(true);
+    expect((await db.checklistItems.get(item.id))?.schedule?.repeat).toBe("ebbinghaus");
+    await updateChecklistItem(item.id, { schedule: { date: "2026-10-15", repeat: "ebbinghaus", until: "2026-10-19" } });
+    expect(Object.keys((await getCalendarMonthData("2026-10-14", "2026-12-31")).todos)).toEqual(dates.slice(0, 4));
+  });
+
+  it("round trips a custom schedule and its completed occurrence", async () => {
+    const schedule: ChecklistSchedule = { date: "2026-01-31", repeat: "custom", interval: 3, unit: "month", time: "08:00" };
+    const item = await scheduledItem("季度整理", schedule);
+    const [todo] = await listTodosByDate("2026-04-30");
+    await setTodoCompleted(todo.id, true);
+    await restoreBackupPayload(await createBackupPayload());
+    db.close(); await db.open();
+    expect((await db.checklistItems.get(item.id))?.schedule).toEqual(schedule);
+    expect((await listTodosByDate("2026-04-30"))[0].completed).toBe(true);
+    expect((await listTodosByDate("2026-07-31"))[0].completed).toBe(false);
+  });
+
+  it("labels the new rules with their interval and selected dates", () => {
+    expect(scheduleLabel({ date: "2026-01-31", repeat: "quarterly" })).toBe("每三个月 31 日 · 全天");
+    expect(scheduleLabel({ date: "2024-02-29", repeat: "yearly" })).toBe("每年 2 月 29 日 · 全天");
+    expect(scheduleLabel({ date: "2026-10-15", repeat: "custom", interval: 3, unit: "week", weekdays: [0, 1] })).toBe("每 3 周 · 周一、日 · 全天");
   });
 
   it("syncs one-off checklist completion both ways and removes calendar entries when dates are cleared", async () => {
@@ -104,7 +179,18 @@ describe("scheduled checklists", () => {
       { date: "2026-10-14", repeat: "daily", time: "25:00" },
       { date: "2026-10-14", repeat: "daily", time: "19:00", endTime: "18:00" },
       { date: "2026-10-14", repeat: "daily", endTime: "18:00" },
-      { date: "2026-10-14", repeat: "daily", until: "2026-10-13" }
+      { date: "2026-10-14", repeat: "daily", until: "2026-10-13" },
+      { date: "2026-10-14", repeat: "biweekly", weekdays: [] },
+      { date: "2026-10-14", repeat: "biweekly", weekdays: [1, 1] },
+      { date: "2026-10-14", repeat: "custom", interval: 0, unit: "day" },
+      { date: "2026-10-14", repeat: "custom", interval: -1, unit: "day" },
+      { date: "2026-10-14", repeat: "custom", interval: 1.5, unit: "day" },
+      { date: "2026-10-14", repeat: "custom", interval: 1000, unit: "day" },
+      { date: "2026-10-14", repeat: "custom", interval: 2, unit: "hour" },
+      { date: "2026-10-14", repeat: "custom", interval: 2 },
+      { date: "2026-10-14", repeat: "custom", unit: "day" },
+      { date: "2026-10-14", repeat: "custom", interval: 2, unit: "week", weekdays: [] },
+      { date: "2026-10-14", repeat: "unknown" }
     ];
     const item = await createChecklistItem("", "测试日期");
     for (const schedule of invalid) {

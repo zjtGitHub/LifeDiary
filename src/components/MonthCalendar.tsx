@@ -5,6 +5,7 @@ import { buildCalendarDays, displayDate, displayMonth, isoDate, moveCalendarDate
 import type { DayEntry, ISODate, TodoItem } from "../types";
 import { scheduleTimeLabel } from "../lib/schedules";
 import { AppLink } from "../lib/router";
+import { healthLabels } from "../lib/health";
 
 interface MonthCalendarProps {
   month: Date;
@@ -114,6 +115,7 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
                   const entry = entries[day.iso];
                   const diaryText = entry?.text.trim();
                   const hasDiary = Boolean(diaryText || entry?.images.length || entry?.tags.length);
+                  const health = healthLabels(entry ?? {});
                   const visibleTodos = view === "month" ? dayTodos.slice(0, hasDiary ? 3 : 4) : dayTodos;
                   const hiddenCount = dayTodos.length - visibleTodos.length;
                   const isSelected = day.iso === focusISO;
@@ -127,12 +129,18 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
                         isSelected ? "is-selected" : ""
                       ].filter(Boolean).join(" ")}
                       role="gridcell" aria-selected={isSelected}
-                      aria-label={`${displayDate(day.iso)}，${dayTodos.length}项计划${hasDiary ? "，有日记" : ""}`} key={day.iso}
+                      aria-label={`${displayDate(day.iso)}，${dayTodos.length}项计划${hasDiary ? "，有日记" : ""}${health.length ? "，有健康记录" : ""}`} key={day.iso}
                     >
+                      <div className="month-calendar-day-heading">
                       <button className="month-calendar-date" type="button" onClick={() => selectDate(day.date)} onDoubleClick={() => openDay(day.date)} aria-label={`选择${displayDate(day.iso)}`} aria-current={day.isToday ? "date" : undefined}>
                         <span className="month-calendar-date-number">{day.date.getDate()}</span>
                         {day.isToday ? <span className="month-calendar-today-label">今天</span> : null}
                       </button>
+                      {health.length ? <AppLink href="/" className="month-calendar-health" aria-label={`查看${displayDate(day.iso)}的健康记录`} title={`${health.join(" · ")}，点击编辑`} onClick={() => selectDate(day.date)}>
+                        {entry?.weightKg !== undefined ? <span title={`体重 ${entry.weightKg * 2} 斤`}>{entry.weightKg * 2}斤</span> : null}
+                        {entry?.calorieDeficitKcal !== undefined ? <span title={`缺口 ${entry.calorieDeficitKcal} 大卡`}>{entry.calorieDeficitKcal}大卡</span> : null}
+                      </AppLink> : null}
+                      </div>
                       <div className="month-calendar-events">
                         {visibleTodos.map((todo) => (
                           <button className={`month-calendar-event${todo.completed ? " completed" : ""}`} type="button" key={todo.id}
@@ -148,7 +156,7 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
                           </AppLink>
                         ) : null}
                         {hiddenCount > 0 ? <button className="month-calendar-more" type="button" onClick={() => openDay(day.date)}>还有 {hiddenCount} 项</button> : null}
-                        {view !== "month" && dayTodos.length === 0 && !hasDiary ? <p className="calendar-day-empty">暂无计划与日记</p> : null}
+                        {view !== "month" && dayTodos.length === 0 && !hasDiary && !health.length ? <p className="calendar-day-empty">暂无计划与日记</p> : null}
                       </div>
                     </article>
                   );

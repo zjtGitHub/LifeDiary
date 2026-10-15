@@ -12,6 +12,80 @@ beforeEach(async () => {
 });
 
 describe("checklist scheduling flow", () => {
+  it("saves and reopens a quarterly schedule with month-end calendar entries", async () => {
+    const item = await createChecklistItem("", "季度整理");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "查看任务：季度整理" }));
+    fireEvent.click(screen.getByRole("button", { name: "设置日期和重复" }));
+    fireEvent.input(screen.getByLabelText("计划日期"), { target: { value: "2026-01-31" } });
+    fireEvent.change(screen.getByLabelText("重复规则"), { target: { value: "quarterly" } });
+    expect(screen.getByText(/当月没有该日期时安排在月末/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await act(async () => {
+      expect((await db.checklistItems.get(item.id))?.schedule).toEqual({ date: "2026-01-31", repeat: "quarterly" });
+      expect((await listTodosByDate("2026-04-30"))[0].title).toBe("季度整理");
+      expect(await listTodosByDate("2026-02-28")).toEqual([]);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "设置日期和重复" }));
+    expect(screen.getByLabelText("重复规则")).toHaveValue("quarterly");
+    fireEvent.keyDown(document, { key: "Escape" });
+  });
+
+  it("validates custom intervals, persists weekly choices and removes custom fields when changing presets", async () => {
+    const item = await createChecklistItem("", "间隔训练");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "查看任务：间隔训练" }));
+    fireEvent.click(screen.getByRole("button", { name: "设置日期和重复" }));
+    fireEvent.input(screen.getByLabelText("计划日期"), { target: { value: "2026-10-12" } });
+    fireEvent.change(screen.getByLabelText("重复规则"), { target: { value: "custom" } });
+    for (const value of ["", "0", "1.5", "1000"]) {
+      fireEvent.change(screen.getByLabelText("重复间隔"), { target: { value } });
+      expect(screen.getByRole("button", { name: "确定" })).toBeDisabled();
+    }
+    fireEvent.change(screen.getByLabelText("重复间隔"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("重复间隔单位"), { target: { value: "week" } });
+    fireEvent.click(screen.getByRole("button", { name: "每周三" }));
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await act(async () => {
+      expect((await db.checklistItems.get(item.id))?.schedule).toEqual({ date: "2026-10-12", repeat: "custom", interval: 3, unit: "week", weekdays: [1, 3] });
+      expect(await listTodosByDate("2026-10-19")).toEqual([]);
+      expect((await listTodosByDate("2026-11-02"))[0].title).toBe("间隔训练");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "设置日期和重复" }));
+    expect(screen.getByLabelText("重复间隔")).toHaveValue(3);
+    expect(screen.getByLabelText("重复间隔单位")).toHaveValue("week");
+    expect(screen.getByRole("button", { name: "每周三" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.change(screen.getByLabelText("重复规则"), { target: { value: "yearly" } });
+    expect(screen.queryByLabelText("重复间隔")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await act(async () => { expect((await db.checklistItems.get(item.id))?.schedule).toEqual({ date: "2026-10-12", repeat: "yearly" }); });
+  });
+
+  it("previews and saves the finite review dates, trimming them at the optional end date", async () => {
+    const item = await createChecklistItem("", "背单词");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "查看任务：背单词" }));
+    fireEvent.click(screen.getByRole("button", { name: "设置日期和重复" }));
+    fireEvent.input(screen.getByLabelText("计划日期"), { target: { value: "2026-10-15" } });
+    fireEvent.change(screen.getByLabelText("重复规则"), { target: { value: "ebbinghaus" } });
+    const reviews = within(screen.getByRole("list", { name: "学习与复习日期" }));
+    expect(reviews.getAllByRole("listitem")).toHaveLength(7);
+    expect(reviews.getByText("2026-11-14")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("设置重复结束日期"));
+    fireEvent.input(screen.getByLabelText("重复结束日期"), { target: { value: "2026-10-19" } });
+    expect(reviews.getAllByRole("listitem")).toHaveLength(4);
+    fireEvent.click(screen.getByRole("button", { name: "确定" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await act(async () => {
+      expect((await db.checklistItems.get(item.id))?.schedule).toEqual({ date: "2026-10-15", repeat: "ebbinghaus", until: "2026-10-19" });
+      expect((await listTodosByDate("2026-10-19"))[0].title).toBe("背单词");
+      expect(await listTodosByDate("2026-10-22")).toEqual([]);
+    });
+  });
+
   it("saves a weekly time range and completes only one occurrence in the calendar", async () => {
     const item = await createChecklistItem("", "上肢训练");
     render(<App />);
