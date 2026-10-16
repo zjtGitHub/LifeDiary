@@ -256,7 +256,7 @@ function App() {
     window.addEventListener("diary-data-restored", refresh);
     return () => window.removeEventListener("diary-data-restored", refresh);
   }, []);
-  const stockRoute = /^\/stocks(?:\/([^/]+))?\/?$/.exec(path);
+  const stockRoute = /^\/stocks(?:\/([^/]+))?(?:\/snapshots\/([^/]+))?\/?$/.exec(path);
   const isCalendarRoute = path === "/calendar";
   const isTaskListRoute = path === "/list";
   const isLifeRoute = path === "/life";
@@ -285,7 +285,7 @@ function App() {
       handleCalendarDateSelect(date);
       navigate("/");
     }} /> : null}
-    {stockRoute ? <StockWorkspace key={dataVersion} stockId={stockRoute[1]} /> : null}
+    {stockRoute ? <StockWorkspace key={dataVersion} stockId={stockRoute[1]} snapshotId={stockRoute[2]} /> : null}
     {!stockRoute && path !== "/" && !isCalendarRoute && !isTaskListRoute && !isLifeRoute ? <main className="app-shell"><h1>页面不存在</h1><AppLink href="/">返回日记</AppLink></main> : null}
   </>;
 }

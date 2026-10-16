@@ -1,11 +1,12 @@
-import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { addTodo, getCalendarMonthData, setTodoCompleted } from "../lib/db";
 import { buildCalendarDays, displayDate, displayMonth, isoDate, moveCalendarDate, parseISODate, type CalendarView } from "../lib/date";
-import type { DayEntry, ISODate, TodoItem } from "../types";
+import type { DayEntry, ISODate, PortfolioSnapshot, TodoItem } from "../types";
 import { scheduleTimeLabel } from "../lib/schedules";
 import { AppLink } from "../lib/router";
 import { healthLabels } from "../lib/health";
+import { formatPortfolioMoney } from "../lib/portfolio-data";
 
 interface MonthCalendarProps {
   month: Date;
@@ -29,6 +30,7 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
   const title = view === "month" ? displayMonth(focusDate) : view === "day" ? displayDate(focusISO) : `${displayDate(firstDay.iso)} — ${displayDate(lastDay.iso)}`;
   const [entries, setEntries] = useState<Record<ISODate, DayEntry>>({});
   const [todos, setTodos] = useState<Record<ISODate, TodoItem[]>>({});
+  const [portfolioSnapshots, setPortfolioSnapshots] = useState<Record<ISODate, PortfolioSnapshot[]>>({});
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddTitle, setQuickAddTitle] = useState("");
   const [refreshVersion, setRefreshVersion] = useState(0);
@@ -39,6 +41,7 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
       if (alive) {
         setEntries(data.entries);
         setTodos(data.todos);
+        setPortfolioSnapshots(data.portfolioSnapshots);
       }
     });
     const refresh = () => setRefreshVersion(version => version + 1);
@@ -112,6 +115,8 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
               <div className="month-calendar-week" role="row" key={row[0].iso}>
                 {row.map((day) => {
                   const dayTodos = todos[day.iso] ?? [];
+                  const dayPortfolioSnapshots = portfolioSnapshots[day.iso] ?? [];
+                  const portfolioSnapshot = dayPortfolioSnapshots[dayPortfolioSnapshots.length - 1];
                   const entry = entries[day.iso];
                   const diaryText = entry?.text.trim();
                   const hasDiary = Boolean(diaryText || entry?.images.length || entry?.tags.length);
@@ -129,7 +134,7 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
                         isSelected ? "is-selected" : ""
                       ].filter(Boolean).join(" ")}
                       role="gridcell" aria-selected={isSelected}
-                      aria-label={`${displayDate(day.iso)}，${dayTodos.length}项计划${hasDiary ? "，有日记" : ""}${health.length ? "，有健康记录" : ""}`} key={day.iso}
+                      aria-label={`${displayDate(day.iso)}，${dayTodos.length}项计划${hasDiary ? "，有日记" : ""}${health.length ? "，有健康记录" : ""}${portfolioSnapshot ? "，有投资组合快照" : ""}`} key={day.iso}
                     >
                       <div className="month-calendar-day-heading">
                       <button className="month-calendar-date" type="button" onClick={() => selectDate(day.date)} onDoubleClick={() => openDay(day.date)} aria-label={`选择${displayDate(day.iso)}`} aria-current={day.isToday ? "date" : undefined}>
@@ -142,6 +147,7 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
                       </AppLink> : null}
                       </div>
                       <div className="month-calendar-events">
+                        {portfolioSnapshot ? <AppLink className="month-calendar-portfolio" href={`/stocks/portfolio/snapshots/${portfolioSnapshot.id}`} title="查看当天的完整投资组合快照"><BarChart3 size={13} aria-hidden="true" /><span>组合快照</span><strong>{formatPortfolioMoney(portfolioSnapshot.account.nav, portfolioSnapshot.currency)}</strong></AppLink> : null}
                         {visibleTodos.map((todo) => (
                           <button className={`month-calendar-event${todo.completed ? " completed" : ""}`} type="button" key={todo.id}
                             onClick={() => void handleToggleTodo(todo)} aria-label={`${todo.completed ? "标记未完成" : "完成计划"}：${todo.title}`} title={`${todo.title}${todo.checklistItemId ? ` · ${scheduleTimeLabel(todo)} · 来自清单` : ""}`}>

@@ -80,6 +80,9 @@ export interface CalendarDayStatus extends DayHealth {
   todoCount: number;
   openTodoCount: number;
   tags: string[];
+  portfolioSnapshotId?: string;
+  portfolioNav?: number;
+  portfolioCurrency?: string;
 }
 
 export interface SearchResult extends DayHealth {
@@ -181,4 +184,63 @@ export interface StockTimelineItem {
   note: StockNote;
   revision: StockNoteRevision;
   versionCount: number;
+}
+
+export interface PortfolioAccountSnapshot {
+  nav: number;
+  cash: number;
+  leverage: number;
+  buyingPower?: number;
+  availableFunds?: number;
+}
+
+export interface PortfolioStockPositionSnapshot {
+  symbol: string;
+  quantity: number;
+  averageCost: number;
+  marketPrice: number;
+  marketValue: number;
+  portfolioWeightPct: number;
+  unrealizedPnl: number;
+  dailyPnl?: number;
+}
+
+export interface PortfolioOptionLegSnapshot {
+  optionType: "CALL" | "PUT";
+  side: "LONG" | "SHORT";
+  strike: number;
+  quantity: number;
+  averagePrice: number;
+  marketPrice: number;
+  marketValue: number;
+}
+
+export type PortfolioOptionStrategyType = "single_call" | "single_put" | "bull_call_vertical" | "bear_call_vertical" | "bull_put_vertical" | "bear_put_vertical" | "covered_call" | "cash_secured_put" | "custom";
+
+export interface PortfolioOptionStrategySnapshot {
+  id: string;
+  symbol: string;
+  strategy: PortfolioOptionStrategyType;
+  expiration: ISODate;
+  quantity: number;
+  averageNetDebit: number;
+  totalCostBasis: number;
+  marketValue: number;
+  portfolioWeightPct: number;
+  unrealizedPnl: number;
+  legs: PortfolioOptionLegSnapshot[];
+}
+
+export interface PortfolioSnapshot {
+  id: string;
+  snapshotDate: ISODate;
+  snapshotTime: string;
+  broker: string;
+  currency: string;
+  account: PortfolioAccountSnapshot;
+  stocks: PortfolioStockPositionSnapshot[];
+  optionStrategies: PortfolioOptionStrategySnapshot[];
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
 }

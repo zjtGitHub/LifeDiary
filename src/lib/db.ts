@@ -2,6 +2,7 @@ import Dexie, { type Table } from "dexie";
 import { eachDayOfInterval, endOfMonth, format, parseISO } from "date-fns";
 import { expandChecklistSchedules, isISODate, isValidSchedule, occursOn, parseOccurrenceId, sortPlans } from "./schedules";
 import { decodeStockBackup, encodeStockBackup, type StockBackupData } from "./stock-backup";
+import { validateStoredPortfolioSnapshot } from "./portfolio-data";
 import type {
   CalendarDayStatus,
   ChecklistGroup,
@@ -13,6 +14,7 @@ import type {
   ISODate,
   MonthlyReflection,
   MonthSummary,
+  PortfolioSnapshot,
   Profile,
   SearchResult,
   Stock,
@@ -45,6 +47,7 @@ export class DiaryDatabase extends Dexie {
   stockNotes!: Table<StockNote, string>;
   stockRevisions!: Table<StockNoteRevision, string>;
   stockImages!: Table<StockNoteImage, string>;
+  portfolioSnapshots!: Table<PortfolioSnapshot, string>;
 
   constructor(name = "riji-db") {
     super(name);
@@ -65,6 +68,7 @@ export class DiaryDatabase extends Dexie {
       checklistItems: "&id, groupId, createdAt"
     });
     this.version(5).stores({ checklistOccurrences: "&[itemId+date], itemId, date" });
+    this.version(6).stores({ portfolioSnapshots: "&id, snapshotDate, [snapshotDate+snapshotTime]" });
   }
 }
 
@@ -176,21 +180,44 @@ export const listTodosByDate = async (date: ISODate): Promise<TodoItem[]> => {
   return data.todos[date] ?? [];
 };
 
+export const savePortfolioSnapshot = async (snapshot: Omit<PortfolioSnapshot, "id" | "createdAt" | "updatedAt">, replaceDate = false): Promise<PortfolioSnapshot> => {
+  const timestamp = now();
+  const saved: PortfolioSnapshot = { ...snapshot, id: createId(), createdAt: timestamp, updatedAt: timestamp };
+  await db.transaction("rw", db.portfolioSnapshots, async () => {
+    if (replaceDate) {
+      const existing = await db.portfolioSnapshots.where("snapshotDate").equals(snapshot.snapshotDate).primaryKeys();
+      await db.portfolioSnapshots.bulkDelete(existing);
+    }
+    await db.portfolioSnapshots.add(saved);
+  });
+  return saved;
+};
+
+export const listPortfolioSnapshots = async (): Promise<PortfolioSnapshot[]> =>
+  (await db.portfolioSnapshots.toArray()).sort((a, b) =>
+    b.snapshotDate.localeCompare(a.snapshotDate) || b.snapshotTime.localeCompare(a.snapshotTime) || b.createdAt.localeCompare(a.createdAt)
+  );
+
+export const getPortfolioSnapshot = (id: string): Promise<PortfolioSnapshot | undefined> => db.portfolioSnapshots.get(id);
+
 export const getCalendarMonthData = async (startDate: ISODate, endDate: ISODate) => {
-  const [entries, todos, items, occurrences] = await Promise.all([
+  const [entries, todos, items, occurrences, snapshots] = await Promise.all([
     db.dayEntries.where("date").between(startDate, endDate, true, true).toArray(),
     db.todos.where("date").between(startDate, endDate, true, true).toArray(),
     db.checklistItems.toArray(),
-    db.checklistOccurrences.where("date").between(startDate, endDate, true, true).toArray()
+    db.checklistOccurrences.where("date").between(startDate, endDate, true, true).toArray(),
+    db.portfolioSnapshots.where("snapshotDate").between(startDate, endDate, true, true).toArray()
   ]);
   const entriesByDate: Record<ISODate, DayEntry> = {};
   const todosByDate: Record<ISODate, TodoItem[]> = {};
+  const portfolioSnapshotsByDate: Record<ISODate, PortfolioSnapshot[]> = {};
 
   for (const entry of entries) entriesByDate[entry.date] = normalizeDayEntry(entry);
   for (const todo of [...todos, ...expandChecklistSchedules(items, occurrences, startDate, endDate)]) (todosByDate[todo.date] ??= []).push(todo);
   for (const plans of Object.values(todosByDate)) sortPlans(plans);
+  for (const snapshot of snapshots.sort((a, b) => a.snapshotTime.localeCompare(b.snapshotTime) || a.createdAt.localeCompare(b.createdAt))) (portfolioSnapshotsByDate[snapshot.snapshotDate] ??= []).push(snapshot);
 
-  return { entries: entriesByDate, todos: todosByDate };
+  return { entries: entriesByDate, todos: todosByDate, portfolioSnapshots: portfolioSnapshotsByDate };
 };
 
 export const addTodo = async (date: ISODate, title: string): Promise<TodoItem> => {
@@ -234,9 +261,10 @@ export const deleteTodo = async (id: string): Promise<void> => {
 };
 
 export const listCalendarStatuses = async (startDate = format(new Date(), "yyyy-MM-01"), endDate = format(endOfMonth(parseISO(startDate)), "yyyy-MM-dd")): Promise<Record<ISODate, CalendarDayStatus>> => {
-  const [entries, dailyTodos, scheduled] = await Promise.all([
+  const [entries, dailyTodos, scheduled, snapshots] = await Promise.all([
     db.dayEntries.toArray(), db.todos.toArray(),
-    getCalendarMonthData(startDate, endDate)
+    getCalendarMonthData(startDate, endDate),
+    db.portfolioSnapshots.where("snapshotDate").between(startDate, endDate, true, true).toArray()
   ]);
   const todos = [...dailyTodos, ...Object.values(scheduled?.todos ?? {}).flat().filter(todo => todo.checklistItemId)];
   const statuses: Record<ISODate, CalendarDayStatus> = {};
@@ -268,6 +296,13 @@ export const listCalendarStatuses = async (startDate = format(new Date(), "yyyy-
       status.openTodoCount += 1;
     }
   });
+
+  for (const snapshot of snapshots.sort((a, b) => a.snapshotTime.localeCompare(b.snapshotTime) || a.createdAt.localeCompare(b.createdAt))) {
+    const status = ensureStatus(snapshot.snapshotDate);
+    status.portfolioSnapshotId = snapshot.id;
+    status.portfolioNav = snapshot.account.nav;
+    status.portfolioCurrency = snapshot.currency;
+  }
 
   return statuses;
 };
@@ -422,6 +457,7 @@ export interface BackupPayload {
   checklistGroups?: ChecklistGroup[];
   checklistItems?: ChecklistItem[];
   checklistOccurrences?: ChecklistOccurrence[];
+  portfolioSnapshots?: PortfolioSnapshot[];
 }
 
 const blobToDataUrl = (blob: Blob): Promise<string> =>
@@ -439,10 +475,10 @@ const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
 };
 
 export const createBackupPayload = async (): Promise<BackupPayload> => {
-  const [profile, entries, todos, monthlyReflections, stocks, notes, revisions, images, checklistGroups, checklistItems, checklistOccurrences] = await db.transaction("r", db.tables, () => Promise.all([
+  const [profile, entries, todos, monthlyReflections, stocks, notes, revisions, images, checklistGroups, checklistItems, checklistOccurrences, portfolioSnapshots] = await db.transaction("r", db.tables, () => Promise.all([
     getProfile(), db.dayEntries.toArray(), db.todos.toArray(), db.monthlyReflections.toArray(),
     db.stocks.toArray(), db.stockNotes.toArray(), db.stockRevisions.toArray(), db.stockImages.toArray(),
-    db.checklistGroups.toArray(), db.checklistItems.toArray(), db.checklistOccurrences.toArray()
+    db.checklistGroups.toArray(), db.checklistItems.toArray(), db.checklistOccurrences.toArray(), db.portfolioSnapshots.toArray()
   ]));
   const stockMemo = await encodeStockBackup({ stocks, notes, revisions, images });
   const dayEntries = await Promise.all(
@@ -481,7 +517,8 @@ export const createBackupPayload = async (): Promise<BackupPayload> => {
     stockMemo,
     checklistGroups,
     checklistItems,
-    checklistOccurrences
+    checklistOccurrences,
+    portfolioSnapshots
   };
 };
 
@@ -490,6 +527,10 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     throw new Error("Unsupported backup file");
   }
   const stockData = decodeStockBackup(payload.stockMemo);
+  const portfolioSnapshots = payload.portfolioSnapshots === undefined ? [] : payload.portfolioSnapshots;
+  if (!Array.isArray(portfolioSnapshots)) throw new Error("Invalid portfolio snapshots");
+  portfolioSnapshots.forEach(validateStoredPortfolioSnapshot);
+  if (new Set(portfolioSnapshots.map(snapshot => snapshot.id)).size !== portfolioSnapshots.length) throw new Error("Invalid portfolio snapshots");
   const checklistGroups = payload.checklistGroups ?? [];
   const checklistItems = payload.checklistItems ?? [];
   if (!Array.isArray(checklistGroups) || !Array.isArray(checklistItems) ||
@@ -561,5 +602,6 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     await db.checklistGroups.bulkPut(checklistGroups);
     await db.checklistItems.bulkPut(checklistItems);
     await db.checklistOccurrences.bulkPut(checklistOccurrences);
+    await db.portfolioSnapshots.bulkPut(portfolioSnapshots);
   });
 };

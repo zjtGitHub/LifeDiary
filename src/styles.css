@@ -234,6 +234,8 @@ button {
   padding: 0 18px 18px;
 }
 
+.calendar-day-cell { position: relative; min-width: 0; }
+
 .calendar-day {
   display: grid;
   grid-template-rows: 18px 12px;
@@ -389,6 +391,10 @@ button {
 .calendar-day.selected .marker {
   background: #fff;
 }
+
+.marker.portfolio { background: #567c66; }
+.calendar-snapshot-link { position: absolute; top: 3px; right: 3px; display: grid; place-items: center; width: 17px; height: 17px; padding: 0; border: 0; border-radius: 5px; background: #e8efe4; color: var(--accent-dark); }
+.calendar-snapshot-link:hover { background: var(--accent); color: #fff; }
 
 .day-layout {
   display: grid;

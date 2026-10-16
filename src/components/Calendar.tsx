@@ -1,9 +1,11 @@
-import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import { useMemo } from "react";
 import { buildMonthGrid, displayMonth, nextMonth, previousMonth } from "../lib/date";
 import type { CalendarDayStatus, ISODate } from "../types";
 import { AppLink } from "../lib/router";
 import { healthLabels } from "../lib/health";
+import { formatPortfolioMoney } from "../lib/portfolio-data";
+import { navigate } from "../lib/router";
 
 interface CalendarProps {
   month: Date;
@@ -60,12 +62,14 @@ export function Calendar({ month, selectedDate, statuses, onMonthChange, onSelec
           const statusLabel = [
             status?.hasDiary ? "有日记" : "",
             status?.hasImages ? "有图片" : "",
-            status?.todoCount ? `${status.openTodoCount}项未完成计划` : ""
+            status?.todoCount ? `${status.openTodoCount}项未完成计划` : "",
+            status?.portfolioSnapshotId ? "有投资组合快照" : ""
           ]
             .filter(Boolean)
             .join("，");
 
           return (
+            <div className="calendar-day-cell" key={day.iso}>
             <button
               className={[
                 "calendar-day",
@@ -76,7 +80,6 @@ export function Calendar({ month, selectedDate, statuses, onMonthChange, onSelec
               ]
                 .filter(Boolean)
                 .join(" ")}
-              key={day.iso}
               type="button"
               onClick={() => onSelectDate(day.iso)}
               aria-pressed={selected}
@@ -91,10 +94,13 @@ export function Calendar({ month, selectedDate, statuses, onMonthChange, onSelec
                     {status.hasDiary ? <i className="marker diary" /> : null}
                     {status.hasImages ? <i className="marker image" /> : null}
                     {status.todoCount > 0 ? <i className={status.openTodoCount > 0 ? "marker todo open" : "marker todo"} /> : null}
+                    {status.portfolioSnapshotId ? <i className="marker portfolio" /> : null}
                   </span>
                 ) : null}
               </span>
             </button>
+            {status?.portfolioSnapshotId ? <button className="calendar-snapshot-link" type="button" aria-label={`查看投资组合快照：${formatPortfolioMoney(status.portfolioNav ?? 0, status.portfolioCurrency ?? "USD")}`} title="查看投资组合快照" onClick={() => navigate(`/stocks/portfolio/snapshots/${status.portfolioSnapshotId}`)}><BarChart3 size={11} aria-hidden="true" /></button> : null}
+            </div>
           );
         })}
       </div>

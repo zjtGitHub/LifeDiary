@@ -3,12 +3,16 @@ import { BookOpenText } from "lucide-react";
 import { db } from "../../lib/db";
 import { AppLink, navigate } from "../../lib/router";
 import { addStock, displayTimestamp } from "../../lib/stocks";
-import type { Stock, StockNote } from "../../types";
+import { formatPortfolioMoney, formatPortfolioPct, portfolioCashPct } from "../../lib/portfolio-data";
+import { listPortfolioSnapshots } from "../../lib/db";
+import type { PortfolioSnapshot, Stock, StockNote } from "../../types";
 import { StockDetail } from "./StockDetail";
+import { PortfolioPage } from "./PortfolioPage";
 
-export function StockWorkspace({ stockId }: { stockId?: string }) {
+export function StockWorkspace({ stockId, snapshotId }: { stockId?: string; snapshotId?: string }) {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [notes, setNotes] = useState<StockNote[]>([]);
+  const [portfolioSnapshots, setPortfolioSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [version, setVersion] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -23,8 +27,8 @@ export function StockWorkspace({ stockId }: { stockId?: string }) {
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     let alive = true;
-    Promise.all([db.stocks.toArray(), db.stockNotes.toArray()]).then(([nextStocks, nextNotes]) => {
-      if (alive) { setStocks(nextStocks); setNotes(nextNotes); setLoaded(true); setError(""); }
+    Promise.all([db.stocks.toArray(), db.stockNotes.toArray(), listPortfolioSnapshots()]).then(([nextStocks, nextNotes, nextSnapshots]) => {
+      if (alive) { setStocks(nextStocks); setNotes(nextNotes); setPortfolioSnapshots(nextSnapshots); setLoaded(true); setError(""); }
     }).catch(() => { if (alive) { setError("股票列表加载失败，请重试"); setLoaded(true); } });
     return () => { alive = false; };
   }, [version]);
@@ -33,11 +37,16 @@ export function StockWorkspace({ stockId }: { stockId?: string }) {
   const latest = (stock: Stock) => notes.filter(note => note.stockId === stock.id).reduce((time, note) => note.updatedAt > time ? note.updatedAt : time, stock.updatedAt);
   const filtered = stocks.filter(stock => Boolean(stock.archivedAt) === archived && `${stock.name} ${stock.code ?? ""} ${stock.market}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || latest(b).localeCompare(latest(a)));
+  const portfolioRoute = stockId === "portfolio";
   return <main className={`app-shell stock-workspace${stockId ? " has-selected-stock" : ""}`}>
     <header className="app-header"><div><p className="eyebrow">观察 · 判断 · 回顾</p><h1>股票备忘录</h1><p className="page-description">记录判断，也记录自己如何改变。</p></div><p className="page-header-note">每一次记录，都是认识的一部分。</p></header>
     {notice ? <p className="stock-notice" role="status">{notice}<button type="button" className="stock-text-button" onClick={() => setNotice("")}>知道了</button></p> : null}
     <div className="stock-workspace-grid">
       <aside className="stock-library" aria-label="股票列表">
+        <AppLink href="/stocks/portfolio" className={`stock-portfolio-card${portfolioRoute ? " selected" : ""}`} aria-current={portfolioRoute ? "page" : undefined}>
+          <span className="stock-portfolio-card-title"><span aria-hidden="true">📊</span><strong>我的投资组合</strong></span>
+          {portfolioSnapshots[0] ? <><strong className="stock-portfolio-card-nav">{formatPortfolioMoney(portfolioSnapshots[0].account.nav, portfolioSnapshots[0].currency)}</strong><span>现金 {formatPortfolioPct(portfolioCashPct(portfolioSnapshots[0]))}</span><small>更新于 {portfolioSnapshots[0].snapshotDate} {portfolioSnapshots[0].snapshotTime.slice(0, 5)}</small></> : <><span>暂无账户快照</span><small>导入第一份快照 →</small></>}
+        </AppLink>
         <section className="panel stock-library-panel">
           <div className="section-heading"><h2>我的股票</h2><button className="secondary icon-text-button" type="button" onClick={() => setAdding(!adding)}>{adding ? "收起" : "添加股票"}</button></div>
           {adding ? <form className="stock-add-form" onSubmit={async event => {
@@ -68,7 +77,7 @@ export function StockWorkspace({ stockId }: { stockId?: string }) {
           })}</div> : <div className="stock-list-empty"><p>{query ? "没有找到股票" : archived ? "还没有归档的股票" : "还没有关注的股票"}</p>{!archived && !query ? <button className="stock-text-button" type="button" onClick={() => setAdding(true)}>添加第一只股票</button> : null}</div>}
         </section>
       </aside>
-      {selected ? <StockDetail key={stockId} stock={selected} version={version} onChanged={refresh} /> : <section className="panel stock-empty stock-select-empty"><span className="stock-empty-mark" aria-hidden="true"><BookOpenText size={32} strokeWidth={1.3} /></span><h2>{stockId && loaded ? "这只股票不存在" : "每只股票，一段认识的历程"}</h2><p>{stockId && loaded ? "股票可能尚未恢复到当前浏览器，请检查备份或返回列表。" : "从左侧选择一只股票，按时间查看想法、图片和关键节点。"}</p>{stockId ? <AppLink href="/stocks">返回股票列表</AppLink> : null}</section>}
+      {selected ? <StockDetail key={stockId} stock={selected} version={version} onChanged={refresh} /> : portfolioRoute ? <PortfolioPage stocks={stocks} snapshotId={snapshotId} onChanged={refresh} /> : <section className="panel stock-empty stock-select-empty"><span className="stock-empty-mark" aria-hidden="true"><BookOpenText size={32} strokeWidth={1.3} /></span><h2>{stockId && loaded ? "这只股票不存在" : "每只股票，一段认识的历程"}</h2><p>{stockId && loaded ? "股票可能尚未恢复到当前浏览器，请检查备份或返回列表。" : "从左侧选择一只股票，按时间查看想法、图片和关键节点。"}</p>{stockId ? <AppLink href="/stocks">返回股票列表</AppLink> : null}</section>}
     </div>
   </main>;
 }
