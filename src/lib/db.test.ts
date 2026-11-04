@@ -31,6 +31,27 @@ describe("IndexedDB data layer", () => {
     await db.open();
   });
 
+  it("preserves waist-only days through calendars, history and backups and rejects invalid imports", async () => {
+    await saveDayHealth("2026-05-05", { waistCm: 82.5 });
+    expect((await listCalendarStatuses())["2026-05-05"]).toMatchObject({ hasDiary: true, waistCm: 82.5 });
+    expect((await searchEntries("2026-05-05"))[0]).toMatchObject({ waistCm: 82.5 });
+    expect((await getYearMonthSummaries(2026))[4].recordedDates).toContain("2026-05-05");
+    const payload = await createBackupPayload();
+    expect(payload.dayEntries[0].waistCm).toBe(82.5);
+    await restoreBackupPayload(payload);
+    expect((await getDayEntry("2026-05-05")).waistCm).toBe(82.5);
+    for (const invalid of [0, -1, NaN, Infinity, "82", null]) {
+      await expect(saveDayHealth("2026-05-05", { waistCm: invalid as number })).rejects.toThrow();
+      const bad = structuredClone(payload);
+      bad.dayEntries[0].waistCm = invalid as number;
+      await expect(restoreBackupPayload(bad)).rejects.toThrow();
+      expect((await getDayEntry("2026-05-05")).waistCm).toBe(82.5);
+    }
+    delete payload.dayEntries[0].waistCm;
+    await restoreBackupPayload(payload);
+    expect((await getDayEntry("2026-05-05")).waistCm).toBeUndefined();
+  });
+
   it("saves and loads diary text and images", async () => {
     await saveDayText("2026-05-05", "今天开始写日记。");
     const file = new File(["image"], "day.png", { type: "image/png" });

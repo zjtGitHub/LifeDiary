@@ -8,6 +8,7 @@ import type { TodoItem } from "../types";
 
 interface DayPanelProps {
   date: string;
+  overviewVersion: number;
   entry: DayEntry;
   text: string;
   todos: TodoItem[];
@@ -51,6 +52,7 @@ function ImagePreview({ image, onDelete }: { image: DiaryImage; onDelete: (id: s
 
 export function DayPanel({
   date,
+  overviewVersion,
   entry,
   text,
   todos,
@@ -162,7 +164,7 @@ export function DayPanel({
         </div>
       </section>
 
-      <HealthPanel key={date} health={entry.date === date ? entry : {}} loading={loading || entry.date !== date} onSave={onHealthChange} />
+      <HealthPanel key={date} date={date} revision={overviewVersion} health={entry.date === date ? entry : {}} loading={loading || entry.date !== date} onSave={onHealthChange} />
       <TodoList todos={todos} onAdd={onAddTodo} onToggle={onToggleTodo} onDelete={onDeleteTodo} />
     </div>
   );

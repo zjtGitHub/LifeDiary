@@ -213,6 +213,7 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
         </aside>
 
         <DayPanel
+          overviewVersion={overviewVersion}
           date={selectedDate}
           entry={entry}
           text={text}

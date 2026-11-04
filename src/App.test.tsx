@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { addTodo, db, saveBirthDate, saveDayText, saveDayWeight } from "./lib/db";
+import { addTodo, db, saveBirthDate, saveDayText, saveDayWeight, saveDayHealth } from "./lib/db";
 
 describe("App", () => {
   beforeEach(async () => {
@@ -100,6 +100,45 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存健康记录" }));
     await screen.findByText("健康记录已保存");
     await waitFor(async () => expect((await db.dayEntries.get("2026-05-05"))?.calorieDeficitKcal).toBeUndefined());
+    expect((await db.dayEntries.get("2026-05-05"))?.weightKg).toBe(65.25);
+  });
+
+  it("saves waist measurements and updates monthly calories and both trends", async () => {
+    HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    await saveDayHealth("2026-04-30", { calorieDeficitKcal: 900 });
+    await saveDayHealth("2026-05-01", { weightKg: 66, waistCm: 85, calorieDeficitKcal: 500 });
+    await saveDayHealth("2026-05-02", { calorieDeficitKcal: 0 });
+    await saveDayHealth("2026-05-03", { calorieDeficitKcal: -150 });
+    await saveDayHealth("2026-06-01", { calorieDeficitKcal: 800 });
+    await saveDayText("2026-05-05", "保留正文");
+    render(<App />);
+    await screen.findByDisplayValue("保留正文");
+    const waist = screen.getByLabelText("当天腰围（厘米）");
+    fireEvent.change(waist, { target: { value: "-1" } });
+    expect(screen.getByRole("button", { name: "保存健康记录" })).toBeDisabled();
+    fireEvent.change(waist, { target: { value: "82.5" } });
+    fireEvent.change(screen.getByLabelText("当天体重（斤）"), { target: { value: "130.5" } });
+    fireEvent.change(screen.getByLabelText("卡路里缺口（大卡）"), { target: { value: "200" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存健康记录" }));
+    await screen.findByText("健康记录已保存");
+    expect(await db.dayEntries.get("2026-05-05")).toMatchObject({ waistCm: 82.5, weightKg: 65.25, text: "保留正文" });
+    await waitFor(() => expect(screen.getByLabelText("每月累计卡路里缺口")).toHaveTextContent("550 大卡"));
+    expect(screen.getByLabelText("每月累计卡路里缺口")).toHaveTextContent("已记录 4 天");
+    fireEvent.click(screen.getByRole("button", { name: "查看体重与腰围趋势" }));
+    const dialog = within(screen.getByRole("dialog", { name: "健康趋势" }));
+    expect(dialog.getByRole("img", { name: "2026-05 体重趋势，2次记录" })).toBeInTheDocument();
+    expect(dialog.getByRole("img", { name: "2026-05 腰围趋势，2次记录" })).toBeInTheDocument();
+    expect(dialog.getByText(/首末变化 -2\.5 厘米/)).toBeInTheDocument();
+    expect(dialog.getByLabelText("2026-05-05：130.5 斤")).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole("button", { name: "查看上个月趋势" }));
+    await dialog.findByText("本月还没有腰围记录，保存后即可查看趋势。");
+    expect(dialog.getByLabelText("每月累计卡路里缺口")).toHaveTextContent("900 大卡");
+    fireEvent.click(dialog.getByRole("button", { name: "关闭健康趋势" }));
+    fireEvent.change(screen.getByLabelText("健康统计月份"), { target: { value: "2026-07" } });
+    await waitFor(() => expect(screen.getByLabelText("每月累计卡路里缺口")).toHaveTextContent("暂无记录"));
+    fireEvent.change(waist, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存健康记录" }));
+    await waitFor(async () => expect((await db.dayEntries.get("2026-05-05"))?.waistCm).toBeUndefined());
     expect((await db.dayEntries.get("2026-05-05"))?.weightKg).toBe(65.25);
   });
 

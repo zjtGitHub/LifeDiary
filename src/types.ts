@@ -10,6 +10,7 @@ export interface DiaryImage {
 
 export interface DayHealth {
   weightKg?: number;
+  waistCm?: number;
   calorieDeficitKcal?: number;
 }
 

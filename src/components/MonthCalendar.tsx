@@ -143,6 +143,7 @@ export function MonthCalendar({ month, selectedDate, onMonthChange, onSelectDate
                       </button>
                       {health.length ? <AppLink href="/" className="month-calendar-health" aria-label={`查看${displayDate(day.iso)}的健康记录`} title={`${health.join(" · ")}，点击编辑`} onClick={() => selectDate(day.date)}>
                         {entry?.weightKg !== undefined ? <span title={`体重 ${entry.weightKg * 2} 斤`}>{entry.weightKg * 2}斤</span> : null}
+                        {entry?.waistCm !== undefined ? <span title={`腰围 ${entry.waistCm} 厘米`}>{entry.waistCm}厘米</span> : null}
                         {entry?.calorieDeficitKcal !== undefined ? <span title={`缺口 ${entry.calorieDeficitKcal} 大卡`}>{entry.calorieDeficitKcal}大卡</span> : null}
                       </AppLink> : null}
                       </div>

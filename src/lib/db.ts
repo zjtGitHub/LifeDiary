@@ -134,13 +134,16 @@ const isValidCalorieDeficit = (value: unknown): value is number => typeof value 
 
 export const saveDayHealth = async (date: ISODate, health: DayHealth): Promise<DayEntry> => {
   if (!isISODate(date) || (health.weightKg !== undefined && !isValidWeight(health.weightKg)) ||
+    (health.waistCm !== undefined && !isValidWeight(health.waistCm)) ||
     (health.calorieDeficitKcal !== undefined && !isValidCalorieDeficit(health.calorieDeficitKcal))) {
-    throw new Error("请检查体重和卡路里缺口，体重需大于 0，卡路里缺口需为有效数字");
+    throw new Error("请检查健康记录，体重和腰围需大于 0，卡路里缺口需为有效数字");
   }
   return updateDayEntry(date, current => {
     const entry = { ...current };
     if (health.weightKg === undefined) delete entry.weightKg;
     else entry.weightKg = health.weightKg;
+    if (health.waistCm === undefined) delete entry.waistCm;
+    else entry.waistCm = health.waistCm;
     if (health.calorieDeficitKcal === undefined) delete entry.calorieDeficitKcal;
     else entry.calorieDeficitKcal = health.calorieDeficitKcal;
     return entry;
@@ -282,8 +285,9 @@ export const listCalendarStatuses = async (startDate = format(new Date(), "yyyy-
 
   entries.map(normalizeDayEntry).forEach((entry) => {
     const status = ensureStatus(entry.date);
-    status.hasDiary = entry.text.trim().length > 0 || entry.tags.length > 0 || entry.weightKg !== undefined || entry.calorieDeficitKcal !== undefined;
+    status.hasDiary = entry.text.trim().length > 0 || entry.tags.length > 0 || entry.weightKg !== undefined || entry.waistCm !== undefined || entry.calorieDeficitKcal !== undefined;
     status.weightKg = entry.weightKg;
+    status.waistCm = entry.waistCm;
     status.calorieDeficitKcal = entry.calorieDeficitKcal;
     status.hasImages = entry.images.length > 0;
     status.tags = entry.tags;
@@ -330,7 +334,7 @@ export const searchEntries = async (query: string): Promise<SearchResult[]> => {
 
   return entries
     .map(normalizeDayEntry)
-    .filter((entry) => entry.text.trim() || entry.tags.length > 0 || entry.images.length > 0 || entry.weightKg !== undefined || entry.calorieDeficitKcal !== undefined)
+    .filter((entry) => entry.text.trim() || entry.tags.length > 0 || entry.images.length > 0 || entry.weightKg !== undefined || entry.waistCm !== undefined || entry.calorieDeficitKcal !== undefined)
     .filter((entry) => {
       if (!normalizedQuery) {
         return true;
@@ -355,6 +359,7 @@ export const searchEntries = async (query: string): Promise<SearchResult[]> => {
         date: entry.date,
         text: entry.text,
         weightKg: entry.weightKg,
+        waistCm: entry.waistCm,
         calorieDeficitKcal: entry.calorieDeficitKcal,
         tags: entry.tags,
         imageCount: entry.images.length,
@@ -422,7 +427,7 @@ export const getYearMonthSummaries = async (year: number): Promise<MonthSummary[
       completedTodoCount: monthTodos.filter((todo) => todo.completed).length,
       tags: Array.from(new Set(monthEntries.flatMap((entry) => entry.tags))),
       recordedDates: Array.from(new Set([
-        ...monthEntries.filter((entry) => entry.text.trim() || entry.tags.length || entry.images.length || entry.weightKg !== undefined || entry.calorieDeficitKcal !== undefined).map((entry) => entry.date),
+        ...monthEntries.filter((entry) => entry.text.trim() || entry.tags.length || entry.images.length || entry.weightKg !== undefined || entry.waistCm !== undefined || entry.calorieDeficitKcal !== undefined).map((entry) => entry.date),
         ...monthTodos.map((todo) => todo.date)
       ])).sort()
     };
@@ -498,6 +503,7 @@ export const createBackupPayload = async (): Promise<BackupPayload> => {
         date: entry.date,
         text: entry.text,
         ...(entry.weightKg !== undefined ? { weightKg: entry.weightKg } : {}),
+      ...(entry.waistCm !== undefined ? { waistCm: entry.waistCm } : {}),
         ...(entry.calorieDeficitKcal !== undefined ? { calorieDeficitKcal: entry.calorieDeficitKcal } : {}),
         tags: entry.tags,
         images,
@@ -559,6 +565,9 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
   if (!Array.isArray(payload.dayEntries) || payload.dayEntries.some(entry => !entry || (entry.weightKg !== undefined && !isValidWeight(entry.weightKg)))) {
     throw new Error("Invalid diary weight data");
   }
+  if (payload.dayEntries.some(entry => entry.waistCm !== undefined && !isValidWeight(entry.waistCm))) {
+    throw new Error("Invalid diary waist data");
+  }
   if (payload.dayEntries.some(entry => entry.calorieDeficitKcal !== undefined && !isValidCalorieDeficit(entry.calorieDeficitKcal))) {
     throw new Error("Invalid diary calorie deficit data");
   }
@@ -567,6 +576,7 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     payload.dayEntries.map(async (entry) => ({
       date: entry.date,
       ...(entry.weightKg !== undefined ? { weightKg: entry.weightKg } : {}),
+      ...(entry.waistCm !== undefined ? { waistCm: entry.waistCm } : {}),
       ...(entry.calorieDeficitKcal !== undefined ? { calorieDeficitKcal: entry.calorieDeficitKcal } : {}),
       text: entry.text ?? "",
       tags: normalizeTags(entry.tags ?? []),
@@ -604,4 +614,9 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     await db.checklistOccurrences.bulkPut(checklistOccurrences);
     await db.portfolioSnapshots.bulkPut(portfolioSnapshots);
   });
+};
+
+export const listMonthHealth = async (month: string): Promise<(DayHealth & { date: ISODate })[]> => {
+  const entries = await db.dayEntries.where("date").between(`${month}-01`, `${month}-31`, true, true).toArray();
+  return entries.map(({ date, weightKg, waistCm, calorieDeficitKcal }) => ({ date, weightKg, waistCm, calorieDeficitKcal }));
 };
