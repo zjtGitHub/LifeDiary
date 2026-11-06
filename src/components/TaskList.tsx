@@ -2,6 +2,7 @@ import { CalendarDays, Repeat2, Check, ChevronDown, Inbox, ListChecks, Plus, Tra
 import { useEffect, useState, type FormEvent } from "react";
 import { createChecklistGroup, createChecklistItem, deleteChecklistGroup, deleteChecklistItem, listChecklists, renameChecklistGroup, updateChecklistItem } from "../lib/checklists";
 import { AppLink } from "../lib/router";
+import { remoteCommitEvent } from "../lib/vault/sync";
 import { scheduleLabel } from "../lib/schedules";
 import { SchedulePicker } from "./SchedulePicker";
 import type { ChecklistGroup, ChecklistItem, ChecklistSchedule } from "../types";
@@ -21,8 +22,13 @@ export function TaskList() {
 
   useEffect(() => {
     let alive = true;
-    listChecklists().then(data => { if (alive) { setGroups(data.groups); setItems(data.items); } }).catch(() => { if (alive) setError("读取清单失败，请刷新重试。"); });
-    return () => { alive = false; };
+    const refresh = () => {
+      void listChecklists().then(data => { if (alive) { setGroups(data.groups); setItems(data.items); } })
+        .catch(() => { if (alive) setError("读取清单失败，请刷新重试。"); });
+    };
+    refresh();
+    window.addEventListener(remoteCommitEvent, refresh);
+    return () => { alive = false; window.removeEventListener(remoteCommitEvent, refresh); };
   }, []);
 
   const run = async (action: () => Promise<void>, message = "") => {

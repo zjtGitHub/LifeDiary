@@ -1615,3 +1615,22 @@ button:disabled { cursor: default; opacity: .5; }
 .health-trends-dialog > .section-heading { flex-direction: row; flex-wrap: nowrap; align-items: flex-start; }
 .health-trends-dialog > .section-heading > div { min-width: 0; }
 .health-trends-dialog > .section-heading > button { flex-shrink: 0; }
+
+.vault-screen { display: grid; min-height: 100dvh; place-items: center; padding: 24px; }
+.vault-card { width: min(100%, 420px); padding: 30px; }
+.vault-card .eyebrow, .vault-status > span { display: inline-flex; gap: 8px; align-items: center; }
+.vault-card h1 { margin: 14px 0 8px; font-size: 1.65rem; }
+.vault-card p { color: var(--muted); line-height: 1.65; }
+.vault-card form { display: grid; gap: 14px; margin-top: 20px; }
+.vault-card label { display: grid; gap: 6px; font-size: .85rem; }
+.vault-card input { min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; }
+.vault-card button, .vault-status button, .vault-conflicts button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.vault-app { min-inline-size: 0; padding: 0; border: 0; margin: 0; }
+.vault-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 20px; background: var(--accent-soft); font-size: .8rem; }
+.vault-status > span:first-child { margin-right: auto; }
+.vault-status button { display: inline-flex; gap: 6px; align-items: center; background: var(--paper); }
+.vault-conflicts { margin: 12px auto; padding: 16px; max-width: min(94vw, 920px); }
+.vault-conflicts h2, .vault-conflicts h3 { font-size: 1rem; }
+.vault-conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.vault-conflict-versions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.vault-conflict-versions pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px; background: var(--paper); }

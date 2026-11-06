@@ -4,6 +4,7 @@ import type { DayEntry, DayHealth, DiaryImage } from "../types";
 import { displayDate } from "../lib/date";
 import { TodoList } from "./TodoList";
 import { HealthPanel } from "./HealthPanel";
+import { privateMode } from "../lib/vault/storage";
 import type { TodoItem } from "../types";
 
 interface DayPanelProps {
@@ -68,13 +69,16 @@ export function DayPanel({
   onDeleteTodo
 }: DayPanelProps) {
   const [tagDraft, setTagDraft] = useState("");
+  const [imageError, setImageError] = useState("");
   const tags = entry.tags ?? [];
 
   const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length > 0) {
-      await onAddImages(files);
       event.target.value = "";
+      setImageError("");
+      try { await onAddImages(files); }
+      catch (error) { setImageError(error instanceof Error ? error.message : "图片保存失败，请重试。"); }
     }
   };
 
@@ -105,6 +109,7 @@ export function DayPanel({
 
         <textarea
           value={text}
+          disabled={privateMode && loading}
           onChange={(event) => onTextChange(event.target.value)}
           placeholder="写下今天发生了什么、想到了什么。"
           aria-label="日记正文"
@@ -152,6 +157,7 @@ export function DayPanel({
             </label>
           </div>
 
+          {imageError ? <p className="form-error" role="alert">{imageError}</p> : null}
           {entry.images.length === 0 ? (
             <div className="diary-image-empty"><ImagePlus size={22} strokeWidth={1.4} aria-hidden="true" /><p>可以把这一天的照片放在这里。</p></div>
           ) : (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BookOpenText } from "lucide-react";
 import { db } from "../../lib/db";
+import { remoteCommitEvent } from "../../lib/vault/sync";
 import { AppLink, navigate } from "../../lib/router";
 import { addStock, displayTimestamp } from "../../lib/stocks";
 import { formatPortfolioMoney, formatPortfolioPct, portfolioCashPct } from "../../lib/portfolio-data";
@@ -33,6 +34,10 @@ export function StockWorkspace({ stockId, snapshotId }: { stockId?: string; snap
     return () => { alive = false; };
   }, [version]);
   const refresh = () => setVersion(previous => previous + 1);
+  useEffect(() => {
+    window.addEventListener(remoteCommitEvent, refresh);
+    return () => window.removeEventListener(remoteCommitEvent, refresh);
+  }, []);
   const selected = stocks.find(stock => stock.id === stockId);
   const latest = (stock: Stock) => notes.filter(note => note.stockId === stock.id).reduce((time, note) => note.updatedAt > time ? note.updatedAt : time, stock.updatedAt);
   const filtered = stocks.filter(stock => Boolean(stock.archivedAt) === archived && `${stock.name} ${stock.code ?? ""} ${stock.market}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))

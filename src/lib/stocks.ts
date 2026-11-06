@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { db } from "./db";
+import { privateMode } from "./vault/storage";
 import type { Stock, StockNote, StockNoteContent, StockNoteRevision, StockTimelineItem } from "../types";
 
 export const stockNoteTypes = ["想法", "事件", "操作", "复盘"] as const;
@@ -32,9 +33,10 @@ export async function addStock(name: string, market: string, code = ""): Promise
   const identity = normalizeStockIdentity(market, code);
   return db.transaction("rw", db.stocks, async () => {
     // A missing code is omitted from the compound index, so uncoded stocks can coexist.
-    const existing = identity.code
+    const existing = identity.code && !privateMode
       ? await db.stocks.where("[market+code]").equals([identity.market, identity.code]).first()
-      : await db.stocks.filter(stock => stock.market === identity.market && !stock.code && stock.name === name.trim()).first();
+      : await db.stocks.filter(stock => stock.market === identity.market &&
+        (identity.code ? stock.code === identity.code : !stock.code && stock.name === name.trim())).first();
     if (existing) return { stock: existing, existing: true };
     const timestamp = now();
     const stock: Stock = { id: newId(), name: name.trim(), ...identity, pinned: false, archivedAt: null, createdAt: timestamp, updatedAt: timestamp };

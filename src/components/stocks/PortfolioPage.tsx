@@ -3,6 +3,7 @@ import { ArrowLeft, BarChart3, Camera, ChevronDown, Clock3, Upload } from "lucid
 import { addStock } from "../../lib/stocks";
 import { AppLink, navigate } from "../../lib/router";
 import { listPortfolioSnapshots, savePortfolioSnapshot } from "../../lib/db";
+import { remoteCommitEvent } from "../../lib/vault/sync";
 import {
   concentrationLabel,
   formatPortfolioMoney,
@@ -34,7 +35,17 @@ export function PortfolioPage({ stocks, snapshotId, onChanged }: { stocks: Stock
   const [savingStock, setSavingStock] = useState("");
 
   const refresh = () => void listPortfolioSnapshots().then(setSnapshots).catch(() => setLoadError("快照加载失败，请重试")).finally(() => setLoaded(true));
-  useEffect(() => { let alive = true; listPortfolioSnapshots().then(items => { if (alive) setSnapshots(items); }).catch(() => { if (alive) setLoadError("快照加载失败，请重试"); }).finally(() => { if (alive) setLoaded(true); }); return () => { alive = false; }; }, []);
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      void listPortfolioSnapshots().then(items => { if (alive) setSnapshots(items); })
+        .catch(() => { if (alive) setLoadError("快照加载失败，请重试"); })
+        .finally(() => { if (alive) setLoaded(true); });
+    };
+    load();
+    window.addEventListener(remoteCommitEvent, load);
+    return () => { alive = false; window.removeEventListener(remoteCommitEvent, load); };
+  }, []);
   const snapshot = snapshots.find(item => item.id === snapshotId);
   const latest = snapshots[0];
   const dayDuplicates = preview ? snapshots.filter(item => item.snapshotDate === preview.snapshotDate) : [];

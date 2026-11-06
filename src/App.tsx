@@ -1,5 +1,5 @@
 import { CalendarDays, BookOpen, ChartNoAxesCombined, HardDrive, ListChecks, NotebookPen, Sprout, ScrollText } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BackupMenu } from "./components/BackupMenu";
 import { StockWorkspace } from "./components/stocks/StockWorkspace";
 import { AppLink, navigate, usePathname } from "./lib/router";
@@ -26,6 +26,8 @@ import {
   searchEntries,
   setTodoCompleted
 } from "./lib/db";
+import { privateMode } from "./lib/vault/storage";
+import { remoteCommitEvent } from "./lib/vault/sync";
 import { buildMonthGrid, isoDate, parseISODate } from "./lib/date";
 import type { CalendarDayStatus, DayEntry, DayHealth, ISODate, SearchResult, TodoItem } from "./types";
 
@@ -49,6 +51,9 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [overviewVersion, setOverviewVersion] = useState(0);
   const [isMonthTimelineOpen, setIsMonthTimelineOpen] = useState(false);
+  const activeDate = useRef(selectedDate);
+  const localEdit = useRef(0);
+  activeDate.current = selectedDate;
   useEffect(() => {
     const pause = () => setIsLoadingDay(true);
     const resume = () => setIsLoadingDay(false);
@@ -121,7 +126,7 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
   }, [selectedDate]);
 
   useEffect(() => {
-    if (isLoadingDay || text === entry.text) {
+    if (privateMode || isLoadingDay || text === entry.text) {
       return;
     }
 
@@ -135,6 +140,40 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
 
     return () => window.clearTimeout(timeout);
   }, [entry.text, isLoadingDay, selectedDate, text]);
+
+  useEffect(() => {
+    if (!privateMode || isLoadingDay || text !== entry.text) return;
+    let alive = true;
+    const refresh = () => {
+      const edit = localEdit.current;
+      void getDayEntry(selectedDate).then(next => {
+        if (alive && activeDate.current === selectedDate && localEdit.current === edit) {
+          setEntry(next);
+          setText(next.text);
+        }
+      }).catch(() => { if (alive) setSaveStatus("读取同步记录失败"); });
+    };
+    window.addEventListener(remoteCommitEvent, refresh);
+    return () => { alive = false; window.removeEventListener(remoteCommitEvent, refresh); };
+  }, [selectedDate, isLoadingDay, text, entry.text]);
+
+  const handleTextChange = (value: string) => {
+    setText(value);
+    if (!privateMode) return;
+    const edit = ++localEdit.current;
+    const date = selectedDate;
+    setSaveStatus("正在保存到本机…");
+    // Queue the IndexedDB transaction before navigation or locking can unmount the editor.
+    void saveDayText(date, value).then(saved => {
+      if (edit === localEdit.current && activeDate.current === date) {
+        setEntry(saved);
+        setSaveStatus("已保存到本机");
+        void refreshOverview();
+      }
+    }).catch(() => {
+      if (edit === localEdit.current && activeDate.current === date) setSaveStatus("本机保存失败，请重试");
+    });
+  };
 
   const handleSelectDate = (date: ISODate) => {
     setSelectedDate(date);
@@ -212,6 +251,7 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
           />
         </aside>
 
+        {privateMode && saveStatus === "本机保存失败，请重试" ? <button type="button" onClick={() => handleTextChange(text)}>重试保存日记</button> : null}
         <DayPanel
           overviewVersion={overviewVersion}
           date={selectedDate}
@@ -221,7 +261,7 @@ function DiaryPage({ active, selectedDate, setSelectedDate, month, setMonth }: D
           saveStatus={saveStatus}
           loading={isLoadingDay}
           onHealthChange={handleHealthChange}
-          onTextChange={setText}
+          onTextChange={handleTextChange}
           onTagsChange={handleTagsChange}
           onAddImages={handleAddImages}
           onDeleteImage={handleDeleteImage}
@@ -276,7 +316,7 @@ function App() {
         <AppLink href="/life" aria-current={isLifeRoute ? "page" : undefined}><Sprout size={16} aria-hidden="true" />人生</AppLink>
         <AppLink href="/stocks" aria-current={stockRoute ? "page" : undefined}><ChartNoAxesCombined size={16} aria-hidden="true" />股票备忘录</AppLink>
       </div>
-      <div className="app-nav-tools"><span className="app-storage-note"><HardDrive size={14} aria-hidden="true" />本地保存<span className="storage-status-dot" aria-hidden="true" /></span><BackupMenu /></div>
+      <div className="app-nav-tools"><span className="app-storage-note"><HardDrive size={14} aria-hidden="true" />{privateMode ? "本机加密" : "本地保存"}<span className="storage-status-dot" aria-hidden="true" /></span><BackupMenu /></div>
     </nav></header>
     {restoreNotice ? <p className="app-restore-notice" role="status">全部数据已恢复。<button type="button" className="stock-text-button" onClick={() => setRestoreNotice(false)}>关闭提示</button></p> : null}
     <div hidden={path !== "/"}><DiaryPage key={dataVersion} active={path === "/"} selectedDate={selectedDate} setSelectedDate={setSelectedDate} month={month} setMonth={setMonth} /></div>

@@ -1,4 +1,5 @@
 import Dexie, { type Table } from "dexie";
+import { canImportPrivateBackup, encryptedStorage, privateMode, vaultDatabaseName, vaultMetaName, type VaultMeta } from "./vault/storage";
 import { eachDayOfInterval, endOfMonth, format, parseISO } from "date-fns";
 import { expandChecklistSchedules, isISODate, isValidSchedule, occursOn, parseOccurrenceId, sortPlans } from "./schedules";
 import { decodeStockBackup, encodeStockBackup, type StockBackupData } from "./stock-backup";
@@ -48,8 +49,9 @@ export class DiaryDatabase extends Dexie {
   stockRevisions!: Table<StockNoteRevision, string>;
   stockImages!: Table<StockNoteImage, string>;
   portfolioSnapshots!: Table<PortfolioSnapshot, string>;
+  vaultMeta!: Table<VaultMeta, string>;
 
-  constructor(name = "riji-db") {
+  constructor(name = "riji-db", privateSchema = name === vaultDatabaseName) {
     super(name);
     this.version(1).stores({
       dayEntries: "&date, updatedAt",
@@ -69,10 +71,19 @@ export class DiaryDatabase extends Dexie {
     });
     this.version(5).stores({ checklistOccurrences: "&[itemId+date], itemId, date" });
     this.version(6).stores({ portfolioSnapshots: "&id, snapshotDate, [snapshotDate+snapshotTime]" });
+    if (privateSchema) this.version(7).stores({
+      [vaultMetaName]: "&id",
+      // Two offline devices can create their own copies. Preserve both revisions on merge.
+      stocks: "&id, archivedAt",
+      stockRevisions: "&id, noteId, stockId, [stockId+occurredAt], [stockId+publishedAt], [noteId+revisionNumber]"
+    });
   }
 }
 
-export const db = new DiaryDatabase();
+export const db = new DiaryDatabase(privateMode ? vaultDatabaseName : undefined);
+if (privateMode) db.use(encryptedStorage());
+
+export const diaryTables = (database: DiaryDatabase) => database.tables.filter(table => table.name !== vaultMetaName);
 
 export const emptyDayEntry = (date: ISODate): DayEntry => ({
   date,
@@ -528,10 +539,12 @@ export const createBackupPayload = async (): Promise<BackupPayload> => {
   };
 };
 
-export const restoreBackupPayload = async (payload: BackupPayload): Promise<void> => {
+export const restoreBackupPayload = async (payload: BackupPayload, onProgress?: (message: string) => void): Promise<void> => {
+  onProgress?.("正在校验备份…");
   if (!payload || payload.app !== "riji" || payload.version !== 1) {
     throw new Error("Unsupported backup file");
   }
+  if (privateMode && !canImportPrivateBackup) throw new Error("请先在线连接并确认加密资料库为空。");
   const stockData = decodeStockBackup(payload.stockMemo);
   const portfolioSnapshots = payload.portfolioSnapshots === undefined ? [] : payload.portfolioSnapshots;
   if (!Array.isArray(portfolioSnapshots)) throw new Error("Invalid portfolio snapshots");
@@ -572,6 +585,7 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     throw new Error("Invalid diary calorie deficit data");
   }
 
+  onProgress?.("正在读取备份图片…");
   const dayEntries = await Promise.all(
     payload.dayEntries.map(async (entry) => ({
       date: entry.date,
@@ -593,26 +607,33 @@ export const restoreBackupPayload = async (payload: BackupPayload): Promise<void
     }))
   );
 
-  await db.transaction("rw", db.tables, async () => {
-    await Promise.all(db.tables.map(table => table.clear()));
-    await db.profile.put(payload.profile ?? { id: "me" });
-    if (dayEntries.length > 0) {
-      await db.dayEntries.bulkPut(dayEntries);
+  const tables = diaryTables(db);
+  await db.transaction("rw", tables, async () => {
+    if (privateMode && (await Promise.all(tables.map(table => table.count()))).some(Boolean)) {
+      throw new Error("加密资料库已有记录。为防止覆盖，旧备份只可导入空资料库。");
     }
-    if (payload.todos.length > 0) {
-      await db.todos.bulkPut(payload.todos);
+    for (const table of tables) await table.clear();
+    const batches: { label: string; table: Table; rows: unknown[] }[] = [
+      { label: "个人资料", table: db.profile, rows: [payload.profile ?? { id: "me" }] },
+      { label: "日记与健康", table: db.dayEntries, rows: dayEntries },
+      { label: "日程", table: db.todos, rows: payload.todos },
+      { label: "月总结", table: db.monthlyReflections, rows: monthlyReflections },
+      { label: "股票", table: db.stocks, rows: stockData.stocks },
+      { label: "股票笔记", table: db.stockNotes, rows: stockData.notes },
+      { label: "股票历史", table: db.stockRevisions, rows: stockData.revisions },
+      { label: "股票图片", table: db.stockImages, rows: stockData.images },
+      { label: "清单分组", table: db.checklistGroups, rows: checklistGroups },
+      { label: "清单", table: db.checklistItems, rows: checklistItems },
+      { label: "重复计划", table: db.checklistOccurrences, rows: checklistOccurrences },
+      { label: "投资组合", table: db.portfolioSnapshots, rows: portfolioSnapshots }
+    ];
+    for (const { label, table, rows } of batches) {
+      for (let offset = 0; offset < rows.length; offset += 20) {
+        onProgress?.(`正在${privateMode ? "加密" : ""}导入${label}（${offset}/${rows.length}）…`);
+        await table.bulkPut(rows.slice(offset, offset + 20));
+      }
     }
-    if (monthlyReflections.length > 0) {
-      await db.monthlyReflections.bulkPut(monthlyReflections);
-    }
-    await db.stocks.bulkPut(stockData.stocks);
-    await db.stockNotes.bulkPut(stockData.notes);
-    await db.stockRevisions.bulkPut(stockData.revisions);
-    await db.stockImages.bulkPut(stockData.images);
-    await db.checklistGroups.bulkPut(checklistGroups);
-    await db.checklistItems.bulkPut(checklistItems);
-    await db.checklistOccurrences.bulkPut(checklistOccurrences);
-    await db.portfolioSnapshots.bulkPut(portfolioSnapshots);
+    onProgress?.("正在提交本机数据…");
   });
 };
 

@@ -1,0 +1,24 @@
+[Unit]
+Description=LifeDiary private sync API
+After=network.target
+
+[Service]
+Type=simple
+User=lifediary
+Group=lifediary
+WorkingDirectory=/opt/lifediary
+ExecStart=/usr/bin/node /opt/lifediary/server/index.mjs
+Environment=LIFEDIARY_DATA_DIR=/var/lib/lifediary-vault
+Environment=LIFEDIARY_ORIGIN=https://129.211.50.155:8080
+Environment=LIFEDIARY_TRUST_PROXY=1
+StateDirectory=lifediary-vault
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
